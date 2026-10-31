@@ -134,7 +134,7 @@ test("enforces daily model-call limit while allowing cached responses", async ()
       body: JSON.stringify({ ...payload, text: "a different post must be blocked" })
     });
     assert.equal(blocked.status, 429);
-    assert.match((await blocked.json()).error, /daily Gemini call limit/i);
+    assert.match((await blocked.json()).error, /daily AI model-call limit/i);
     assert.equal(counter.calls, 1);
   });
 });

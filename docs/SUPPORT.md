@@ -1,29 +1,23 @@
-# LinkedIn TL;DR — Support
+# Support — LinkedIn TL;DR V9
 
-This developer release is a paste-first Chrome extension paired with a local Node.js server. It is not an official LinkedIn integration.
-
-## Setup checklist
+## First setup
 
 1. Install Node.js 20 or newer.
-2. Load the `extension/` directory in `chrome://extensions` with Developer mode enabled.
-3. Copy the extension ID from the extension card into `EXTENSION_ID` in `server/.env`.
-4. Add your Gemini API key to `GEMINI_API_KEY` in the same file.
+2. Copy `.env.example` to `.env` inside `server/`.
+3. Add at least one API key: `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`.
+4. Load the `extension/` folder at `chrome://extensions` and copy its ID into `EXTENSION_ID` in `server/.env`.
 5. Run `npm install` and `npm run dev` from `server/`.
-6. Open the extension and accept the first-run data-use notice.
+6. Reload the extension and accept the provider data-use notice.
 
 ## Common issues
 
-- **Cannot reach local backend:** confirm the server is running and listening at `127.0.0.1:8787`.
-- **Local server configuration is invalid:** verify that `EXTENSION_ID` contains the 32-character ID displayed by Chrome, using only letters `a` through `p`.
-- **Origin not allowed:** the ID in `server/.env` must match the extension currently loaded in Chrome. Reloading it from another directory can result in another unpacked extension ID.
-- **Gemini model not found:** set `GEMINI_MODEL` to a model available to your Google AI Studio project.
-- **Daily Gemini call limit reached:** wait until 00:00 UTC or increase `DAILY_MODEL_CALL_LIMIT` in `server/.env`. Set it to `0` for unlimited use.
-- **History missing:** confirm that history was enabled before the summary was generated. History is local to the current Chrome profile and expires according to the Settings retention choice.
+- **Cannot reach local backend:** confirm the server is running on `127.0.0.1:8787`.
+- **Origin not allowed:** update `EXTENSION_ID` to the ID shown for the currently loaded extension.
+- **No provider configured:** add a valid provider key in `server/.env` and restart the server.
+- **Provider authentication failed:** check that provider key and project access.
+- **Model not found:** set the model field in `.env` to a model enabled for the configured account.
+- **Daily model-call limit reached:** wait until 00:00 UTC or adjust `DAILY_MODEL_CALL_LIMIT`.
+- **Summary parse failed:** retry; models can occasionally return malformed structured JSON.
+- **History search returns no result:** search terms are matched against saved source text, summary text, concepts, and claims; only entries saved in this Chrome profile are searchable.
 
-## Privacy
-
-Do not send API keys, private post content, exported history files, or screenshots containing personal data when requesting support. Summarized text is sent to Google Gemini through the local backend. See `PRIVACY_POLICY.md`.
-
-## Publisher contact
-
-The publisher must add and monitor a real support contact before public distribution: [add support email or support URL].
+Never share API keys, private post content, exported history files, or evaluation reports containing content you consider sensitive when requesting support.

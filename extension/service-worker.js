@@ -15,6 +15,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: safeMessage(error) }));
     return true;
   }
+  if (message?.type === "GET_CAPABILITIES") {
+    fetchCapabilities()
+      .then((capabilities) => sendResponse({ ok: true, capabilities }))
+      .catch((error) => sendResponse({ ok: false, error: safeMessage(error) }));
+    return true;
+  }
 });
 
 async function handleSummarize(payload) {
@@ -26,10 +32,14 @@ async function handleSummarize(payload) {
   const length = ["concise", "standard", "detailed"].includes(payload.length) ? payload.length : "standard";
   const tone = ["neutral", "simple", "technical"].includes(payload.tone) ? payload.tone : "neutral";
   const language = ["auto", "en", "hi", "mr", "hinglish"].includes(payload.language) ? payload.language : "auto";
+  const mode = ["general", "beginner", "technical", "executive"].includes(payload.mode) ? payload.mode : "general";
+  const provider = ["auto", "gemini", "openai", "anthropic"].includes(payload.provider) ? payload.provider : "auto";
+  const modelPreference = ["auto", "fast", "quality"].includes(payload.modelPreference) ? payload.modelPreference : "auto";
+  const profile = payload.profile && typeof payload.profile === "object" ? payload.profile : {};
   const body = await requestJson(`${API_ROOT}/api/summarize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, length, tone, language })
+    body: JSON.stringify({ text, length, tone, language, mode, provider, modelPreference, profile })
   });
   if (typeof body.summary !== "string" || !body.summary.trim()) throw new Error("The backend returned an empty summary. Try again.");
   return {
@@ -39,6 +49,8 @@ async function handleSummarize(payload) {
     cache: body.cache || "MISS",
     durationMs: Number.isFinite(body.durationMs) ? body.durationMs : null,
     model: typeof body.model === "string" ? body.model : "",
+    provider: typeof body.provider === "string" ? body.provider : "",
+    routeKind: typeof body.routeKind === "string" ? body.routeKind : "",
     usage: body.usage || null
   };
 }
@@ -46,6 +58,12 @@ async function handleSummarize(payload) {
 async function fetchMetrics() {
   const body = await requestJson(`${API_ROOT}/metrics`, { method: "GET" });
   if (!body || typeof body !== "object") throw new Error("The backend returned invalid metrics.");
+  return body;
+}
+
+async function fetchCapabilities() {
+  const body = await requestJson(`${API_ROOT}/api/capabilities`, { method: "GET" });
+  if (!body || !Array.isArray(body.providers)) throw new Error("The backend returned invalid provider settings.");
   return body;
 }
 

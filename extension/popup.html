@@ -26,7 +26,7 @@
     <section id="summaryPanel" class="panel active" data-panel="summary">
       <section id="consentCard" class="consent-card" hidden>
         <p class="eyebrow">BEFORE YOUR FIRST SUMMARY</p>
-        <p><strong>Your text is sent to Google Gemini.</strong> The local backend sends only the text and summary preferences you submit. History is saved in this Chrome profile only when you turn it on.</p>
+        <p><strong>Your submitted text is sent to the AI provider you select and have configured locally.</strong> This may be Google Gemini, OpenAI, or Anthropic. Your selected profile preferences may also be sent with the request. History and feedback stay in this Chrome profile.</p>
         <label class="consent-check"><input id="consentCheck" type="checkbox"><span>I understand and want to continue.</span></label>
       </section>
 
@@ -38,8 +38,11 @@
 
       <section class="controls" aria-label="Summary preferences">
         <div><label for="length">Length</label><select id="length"><option value="concise">Concise</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select></div>
-        <div><label for="tone">Style</label><select id="tone"><option value="neutral" selected>Neutral</option><option value="simple">Simple</option><option value="technical">Technical</option></select></div>
-        <div class="language-control"><label for="language">Summary language</label><select id="language"><option value="auto" selected>Same as post</option><option value="en">English</option><option value="hi">Hindi</option><option value="mr">Marathi</option><option value="hinglish">Hinglish</option></select></div>
+        <div><label for="tone">Writing style</label><select id="tone"><option value="neutral" selected>Neutral</option><option value="simple">Simple</option><option value="technical">Technical</option></select></div>
+        <div><label for="summaryMode">Summary mode</label><select id="summaryMode"><option value="general" selected>General</option><option value="beginner">Beginner explanation</option><option value="technical">Technical deep-dive</option><option value="executive">Executive brief</option></select></div>
+        <div><label for="provider">AI provider</label><select id="provider"><option value="auto">Auto (configured default)</option><option value="gemini">Google Gemini</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></div>
+        <div><label for="modelPreference">Model routing</label><select id="modelPreference"><option value="auto" selected>Auto (recommended)</option><option value="fast">Fast / lower cost</option><option value="quality">Quality</option></select></div>
+        <div><label for="language">Summary language</label><select id="language"><option value="auto" selected>Same as post</option><option value="en">English</option><option value="hi">Hindi</option><option value="mr">Marathi</option><option value="hinglish">Hinglish</option></select></div>
       </section>
 
       <label class="privacy-toggle"><input id="saveHistory" type="checkbox"><span><strong>Save history on this device</strong><small>Stores the pasted text and summary locally. Nothing is synced.</small></span></label>
@@ -54,6 +57,7 @@
           <span>Was this useful?</span>
           <button class="feedback-button" type="button" data-rating="useful" aria-label="This summary was useful">Useful</button>
           <button class="feedback-button" type="button" data-rating="not-useful" aria-label="This summary was not useful">Not useful</button>
+          <select id="feedbackReason" aria-label="Optional feedback reason"><option value="">Why? (optional)</option><option value="too-vague">Too vague</option><option value="missed-tech">Missed technical detail</option><option value="too-long">Too long</option><option value="inaccurate">Not faithful to the post</option></select>
           <small id="feedbackStatus">Feedback stays on this device.</small>
         </div>
         <div class="export-row">
@@ -67,7 +71,8 @@
 
     <section id="historyPanel" class="panel" data-panel="history" hidden>
       <div class="section-heading"><div><p class="eyebrow">ON THIS DEVICE</p><h2>Summary history</h2></div><button id="clearHistoryBtn" class="text-button" type="button">Clear all</button></div>
-      <p class="panel-note">History stays in this Chrome profile. It is not uploaded or synced by this extension.</p>
+      <p class="panel-note">Search ranks your saved summaries locally. Search terms are not sent to an AI provider.</p>
+      <input id="historySearch" class="search-input" type="search" placeholder="Search saved summaries…" autocomplete="off">
       <div id="historyList" class="history-list"><p class="empty-state">No saved summaries yet.</p></div>
     </section>
 
@@ -76,7 +81,7 @@
       <p id="usageStatus" class="panel-note">Stats include daily limits and backend counters.</p>
       <div class="metric-grid">
         <article class="metric"><span>Requests</span><strong id="metricRequests">—</strong></article>
-        <article class="metric"><span>Gemini calls today</span><strong id="metricCalls">—</strong><small id="metricDailyLimit">Daily limit: —</small></article>
+        <article class="metric"><span>AI calls today</span><strong id="metricCalls">—</strong><small id="metricDailyLimit">Daily limit: —</small></article>
         <article class="metric"><span>Cache hits</span><strong id="metricCache">—</strong></article>
         <article class="metric"><span>Total tokens today</span><strong id="metricTokens">—</strong></article>
         <article class="metric wide"><span>Estimated API cost (USD)</span><strong id="metricCost">—</strong><small id="metricCostNote">Configure token rates in server/.env to estimate paid usage.</small></article>
@@ -93,9 +98,19 @@
         <select id="retentionDays"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="0">Keep until I delete it</option></select>
       </div>
       <div class="settings-card">
+        <strong>Personal summary profile</strong>
+        <p>These preferences are saved locally. When you summarize, the selected profile details are included in the request to your configured AI provider.</p>
+        <label for="expertise">Your familiarity with the topics</label>
+        <select id="expertise"><option value="auto">Not specified</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select>
+        <label for="focusAreas">Topics you care about (optional)</label>
+        <input id="focusAreas" type="text" maxlength="120" placeholder="e.g. backend systems, databases, distributed systems">
+        <label class="inline-check"><input id="applyFeedback" type="checkbox"><span>Apply my local feedback to future summaries</span></label>
+        <p id="feedbackInsights" class="panel-note">No feedback patterns yet.</p>
+      </div>
+      <div class="settings-card">
         <strong>What leaves this device?</strong>
-        <p>When you summarize, the text you pasted and your selected summary options are sent to Google Gemini through the local Node.js backend. The backend stores aggregate usage counters, not post content. Feedback, preferences, and optional history remain in Chrome local storage.</p>
-        <p>No LinkedIn page access, cookies, automatic collection, or remote analytics are used.</p>
+        <p>When you summarize, the pasted text, selected summary options, and enabled profile/feedback guidance are sent to your selected configured AI provider through the local Node.js backend. Backend usage files contain aggregate counters, not post content. Preferences, feedback, and optional history remain in Chrome local storage.</p>
+        <p>No LinkedIn page access, cookies, automatic collection, or remote analytics are used. OpenAI and Anthropic are optional: their API keys are added only to your local server/.env.</p>
       </div>
       <div class="settings-card">
         <strong>Data controls</strong>
@@ -109,7 +124,7 @@
       </div>
     </section>
 
-    <footer><span>Manual input only</span><span>·</span><span>No LinkedIn page access</span><span>·</span><span>V0.7.0</span></footer>
+    <footer><span>Manual input only</span><span>·</span><span>No LinkedIn page access</span><span>·</span><span>V0.9.0</span></footer>
   </main>
   <script src="popup.js" type="module"></script>
 </body>

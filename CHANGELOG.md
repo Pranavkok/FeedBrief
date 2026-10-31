@@ -1,33 +1,26 @@
 # Changelog
 
-## 0.5.0 — V4 + V5
+## V9 (0.9.0)
 
-### V4
-- Added strict request validation, request/body limits, configurable API rate limiting, backend timeout, safer errors, graceful shutdown, and optional extension-origin pinning.
-- Retained the local-only backend, LRU/TTL cache, and duplicate-request coalescing.
-- Added more automated tests, including HTTP-level tests for caching, CORS, cost metrics, and timeouts.
-
-### V5
-- Added opt-in device-local summary history with per-entry deletion and clear-all.
-- Added simple writing style and same-as-source, English, Hindi, Marathi, and Hinglish summary languages.
-- Persisted summary preferences locally.
-- Added Markdown and plain-text exports.
-- Added usage dashboard with request/cache/model counters, token usage, and optional configurable USD cost estimates.
-- Kept platform integration paste-only; no LinkedIn DOM access or automation was introduced.
+- Added provider adapters for Gemini, OpenAI Chat Completions, and Anthropic Messages. Gemini remains the default; other providers are optional and require user-supplied keys in the local `.env`.
+- Added provider capability discovery and automatic fast/quality routing based on summary mode, detail level, reader expertise, and source length.
+- Added explicit provider and model-routing preferences in the extension UI.
+- Added General, Beginner, Technical, and Executive summary modes.
+- Expanded structured output to include concepts, author claims, source examples, caveats, and author-stated action items.
+- Added locally stored reader expertise, focus areas, and opt-in feedback-derived prompt guidance.
+- Added local relevance-ranked search over saved source text, summaries, and AI-extracted concepts/claims; search queries do not leave the device.
+- Added a synthetic evaluation dataset, deterministic scoring rubric, and local-backend evaluation command.
+- Added provider-specific token-rate configuration for approximate cost estimates.
+- Updated first-run disclosure to describe the provider selected/configured by the user.
+- Kept V7's local Node.js backend, history storage, daily call cap, cache, and paste-only LinkedIn boundary.
 
 ## V6 + V7 (0.7.0)
 
-### V6 — product readiness
-- First-run, affirmative disclosure explaining that submitted text is sent to Google Gemini.
-- Local-only usefulness feedback; rating events do not include source text and are not transmitted.
-- Configurable local history retention (7 / 30 / 90 days, or manual deletion).
-- Export all local extension data as JSON and delete all local data from Settings.
-- Keyboard shortcuts: Ctrl/Cmd+Enter summarizes in the open popup; Ctrl/Command+Shift+L opens the popup.
-- Persistent UTC-day Gemini model-call cap; cached responses do not consume the cap.
-- Daily aggregate usage/cost persisted without storing post text or summaries.
+- First-run data-use disclosure and consent.
+- Local feedback, history retention, data export/delete controls, keyboard shortcuts, and daily provider-call limit.
+- Chrome Web Store submission draft, support/privacy documents, release packaging script, and screenshots guide.
+- Manifest V3 extension release preparation.
 
-### V7 — distribution preparation
-- Manifest and extension version bumped to 0.7.0; extension icon and store package build script added.
-- Chrome Web Store listing copy, reviewer notes, permission justifications, privacy policy draft, and submission checklist included.
-- No LinkedIn page permissions, scraping, DOM automation, cookies, or feed-reading API integration added.
-- A Chrome Web Store upload package can be generated, but public submission is still gated on hosting the privacy policy/support details and deciding how users will install/run the companion local backend.
+## V4 + V5 (0.5.0)
+
+- Structured summaries, summary preferences, local history, caching, usage metrics, and product UI improvements.

@@ -38,7 +38,7 @@ writeFileSync(join(outputDir, "RELEASE-INFO.txt"), [
   "Permissions: storage; http://127.0.0.1:8787/*",
   "LinkedIn page access: none",
   "",
-  "Important: the extension requires its companion local Node.js server and the user's own Gemini API key.",
+  "Important: the extension requires its companion local Node.js server and at least one provider API key configured in the local backend. Provider keys never ship with the extension.",
   "This is a developer/reviewer candidate, not a one-click consumer release.",
   "Before public publication, host the privacy policy and support page, add real extension screenshots,",
   "finalize developer contact details, and confirm the Chrome Web Store review/testing experience."

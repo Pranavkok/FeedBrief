@@ -1,9 +1,11 @@
+import { searchHistory } from "./history-search.js";
+
 const MAX_CHARS = 20_000;
 const MAX_HISTORY = 40;
 const MAX_FEEDBACK = 100;
 const HISTORY_KEY = "tldrHistoryV5";
 const PREFS_KEY = "tldrPreferencesV5";
-const CONSENT_KEY = "tldrGeminiDisclosureAcceptedV6";
+const CONSENT_KEY = "tldrAiDisclosureAcceptedV9";
 const FEEDBACK_KEY = "tldrFeedbackV6";
 
 const input = document.querySelector("#postText");
@@ -17,6 +19,13 @@ const result = document.querySelector("#result");
 const lengthControl = document.querySelector("#length");
 const toneControl = document.querySelector("#tone");
 const languageControl = document.querySelector("#language");
+const summaryModeControl = document.querySelector("#summaryMode");
+const providerControl = document.querySelector("#provider");
+const modelPreferenceControl = document.querySelector("#modelPreference");
+const expertiseControl = document.querySelector("#expertise");
+const focusAreasControl = document.querySelector("#focusAreas");
+const applyFeedbackControl = document.querySelector("#applyFeedback");
+const historySearchControl = document.querySelector("#historySearch");
 const saveHistoryControl = document.querySelector("#saveHistory");
 const retentionControl = document.querySelector("#retentionDays");
 const consentCard = document.querySelector("#consentCard");
@@ -53,11 +62,14 @@ async function initialize() {
   document.querySelector("#exportDataBtn").addEventListener("click", exportLocalData);
   document.querySelector("#clearAllDataBtn").addEventListener("click", clearAllLocalData);
   historyList.addEventListener("click", handleHistoryClick);
+  historySearchControl.addEventListener("input", () => { void readHistory().then(renderHistory); });
   document.querySelector("#feedbackRow").addEventListener("click", handleFeedbackClick);
   document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
-  for (const control of [lengthControl, toneControl, languageControl, saveHistoryControl, retentionControl]) {
+  for (const control of [lengthControl, toneControl, languageControl, summaryModeControl, providerControl, modelPreferenceControl,
+    saveHistoryControl, retentionControl, expertiseControl, applyFeedbackControl]) {
     control.addEventListener("change", savePreferences);
   }
+  focusAreasControl.addEventListener("change", savePreferences);
   consentCheck.addEventListener("change", saveConsent);
 
   try {
@@ -66,6 +78,12 @@ async function initialize() {
     if (["concise", "standard", "detailed"].includes(prefs.length)) lengthControl.value = prefs.length;
     if (["neutral", "simple", "technical"].includes(prefs.tone)) toneControl.value = prefs.tone;
     if (["auto", "en", "hi", "mr", "hinglish"].includes(prefs.language)) languageControl.value = prefs.language;
+    if (["general", "beginner", "technical", "executive"].includes(prefs.summaryMode)) summaryModeControl.value = prefs.summaryMode;
+    if (["auto", "gemini", "openai", "anthropic"].includes(prefs.provider)) providerControl.value = prefs.provider;
+    if (["auto", "fast", "quality"].includes(prefs.modelPreference)) modelPreferenceControl.value = prefs.modelPreference;
+    if (["auto", "beginner", "intermediate", "advanced"].includes(prefs.expertise)) expertiseControl.value = prefs.expertise;
+    if (typeof prefs.focusAreas === "string") focusAreasControl.value = prefs.focusAreas.slice(0, 120);
+    applyFeedbackControl.checked = prefs.applyFeedback === true;
     if ([7, 30, 90, 0].includes(Number(prefs.retentionDays))) retentionControl.value = String(prefs.retentionDays);
     saveHistoryControl.checked = prefs.saveHistory === true;
     consentAccepted = stored[CONSENT_KEY] === true;
@@ -80,6 +98,8 @@ async function initialize() {
     setStatus("Local extension storage is unavailable. Enable extension storage to continue.", true);
   }
   updateCount();
+  await loadCapabilities();
+  await loadFeedbackInsights();
 }
 
 function updateConsentUI() {
@@ -135,7 +155,15 @@ async function summarize() {
         text,
         length: lengthControl.value,
         tone: toneControl.value,
-        language: languageControl.value
+        language: languageControl.value,
+        mode: summaryModeControl.value,
+        provider: providerControl.value,
+        modelPreference: modelPreferenceControl.value,
+        profile: {
+          expertise: expertiseControl.value,
+          focusAreas: focusAreasControl.value.trim(),
+          feedbackHints: applyFeedbackControl.checked ? await getFeedbackGuidance() : ""
+        }
       }
     });
     if (!response?.ok) throw new Error(response?.error || "Summarization failed.");
@@ -149,7 +177,8 @@ async function summarize() {
     resetFeedbackState();
     const elapsed = response.durationMs ?? Math.round(performance.now() - started);
     const sourceLabel = response.cache === "HIT" ? "Cache hit" : response.cache === "COALESCED" ? "Shared request" : "Generated";
-    resultInfo.textContent = `${sourceLabel} · ${elapsed} ms`;
+    const selectedModel = [response.provider, response.model].filter(Boolean).join(" / ");
+    resultInfo.textContent = `${sourceLabel} · ${elapsed} ms${selectedModel ? ` · ${selectedModel}` : ""}`;
     resultUsage.textContent = formatUsage(response.usage);
     setStatus(response.cache === "HIT" ? "Summary ready · served from cache." : response.cache === "COALESCED" ? "Summary ready · shared an in-progress request." : "Summary ready.", false, true);
 
@@ -161,8 +190,11 @@ async function summarize() {
           sourceText: text,
           summary: response.summary,
           sections: response.sections,
-          settings: { length: lengthControl.value, tone: toneControl.value, language: languageControl.value },
+          settings: { length: lengthControl.value, tone: toneControl.value, language: languageControl.value,
+            summaryMode: summaryModeControl.value, provider: providerControl.value, modelPreference: modelPreferenceControl.value,
+            profile: { expertise: expertiseControl.value, focusAreas: focusAreasControl.value.trim() } },
           model: response.model || "",
+          provider: response.provider || "",
           cached: Boolean(response.cached),
           usage: response.usage || null
         });
@@ -186,24 +218,48 @@ function renderSummary(sections, fallback) {
     return;
   }
   addSection("TL;DR", sections.tldr, "p");
-  if (Array.isArray(sections.keyTakeaways) && sections.keyTakeaways.length) {
-    const heading = document.createElement("h3");
-    heading.textContent = "Key takeaways";
-    result.append(heading);
-    const list = document.createElement("ul");
-    for (const item of sections.keyTakeaways) {
-      const li = document.createElement("li");
-      li.textContent = item;
-      list.append(li);
-    }
-    result.append(list);
-  }
-  if (sections.whyItMatters) addSection("Why it matters", sections.whyItMatters, "p");
+  addStringList("Key takeaways", sections.keyTakeaways);
+  addSection("Why it matters", sections.whyItMatters, "p");
+  addObjectList("Concepts", sections.concepts, "name", "explanation");
+  addObjectList("Claims", sections.claims, "claim", "qualification");
+  addStringList("Examples from the post", sections.examples);
+  addStringList("Caveats", sections.caveats);
+  addStringList("Author's action items", sections.actionItems);
   if (!result.childElementCount) {
     const p = document.createElement("p");
     p.textContent = fallback;
     result.append(p);
   }
+}
+
+function addStringList(title, values) {
+  if (!Array.isArray(values) || !values.length) return;
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  for (const value of values) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    const li = document.createElement("li");
+    li.textContent = value;
+    list.append(li);
+  }
+  if (list.childElementCount) result.append(heading, list);
+}
+
+function addObjectList(title, values, primaryKey, secondaryKey) {
+  if (!Array.isArray(values) || !values.length) return;
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  const list = document.createElement("ul");
+  for (const item of values) {
+    const primary = typeof item?.[primaryKey] === "string" ? item[primaryKey].trim() : "";
+    const secondary = typeof item?.[secondaryKey] === "string" ? item[secondaryKey].trim() : "";
+    if (!primary) continue;
+    const li = document.createElement("li");
+    li.textContent = secondary ? `${primary}: ${secondary}` : primary;
+    list.append(li);
+  }
+  if (list.childElementCount) result.append(heading, list);
 }
 
 function addSection(title, content, tag) {
@@ -224,6 +280,9 @@ function setBusy(value) {
   lengthControl.disabled = value;
   toneControl.disabled = value;
   languageControl.disabled = value;
+  summaryModeControl.disabled = value;
+  providerControl.disabled = value;
+  modelPreferenceControl.disabled = value;
 }
 
 function setStatus(message, isError = false, isSuccess = false) {
@@ -260,11 +319,21 @@ function exportSummary(format) {
 function toMarkdown(sections, fallback) {
   if (!sections || typeof sections !== "object") return `# Summary\n\n${fallback}\n`;
   const lines = ["# Summary", "", "## TL;DR", "", sections.tldr || fallback, ""];
-  if (Array.isArray(sections.keyTakeaways) && sections.keyTakeaways.length) {
-    lines.push("## Key takeaways", "", ...sections.keyTakeaways.map((item) => `- ${item}`), "");
-  }
+  appendMarkdownList(lines, "Key takeaways", sections.keyTakeaways);
   if (sections.whyItMatters) lines.push("## Why it matters", "", sections.whyItMatters, "");
+  appendMarkdownObjects(lines, "Concepts", sections.concepts, "name", "explanation");
+  appendMarkdownObjects(lines, "Claims", sections.claims, "claim", "qualification");
+  appendMarkdownList(lines, "Examples from the post", sections.examples);
+  appendMarkdownList(lines, "Caveats", sections.caveats);
+  appendMarkdownList(lines, "Author's action items", sections.actionItems);
   return lines.join("\n");
+}
+
+function appendMarkdownList(lines, title, values = []) {
+  if (Array.isArray(values) && values.length) lines.push(`## ${title}`, "", ...values.map((value) => `- ${value}`), "");
+}
+function appendMarkdownObjects(lines, title, values = [], primaryKey, secondaryKey) {
+  if (Array.isArray(values) && values.length) lines.push(`## ${title}`, "", ...values.map((item) => `- **${item[primaryKey]}**${item[secondaryKey] ? `: ${item[secondaryKey]}` : ""}`), "");
 }
 
 function downloadFile(content, filename, mime) {
@@ -306,15 +375,18 @@ function pruneHistory(history) {
 }
 
 function renderHistory(history) {
+  const filtered = searchHistory(history, historySearchControl.value);
   historyList.replaceChildren();
-  if (!history.length) {
+  if (!filtered.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "No saved summaries yet. Turn on history before summarizing a post.";
+    empty.textContent = historySearchControl.value.trim()
+      ? "No saved summaries match that search."
+      : "No saved summaries yet. Turn on history before summarizing a post.";
     historyList.append(empty);
     return;
   }
-  for (const item of history) {
+  for (const item of filtered) {
     const row = document.createElement("div");
     row.className = "history-item";
     const open = document.createElement("button");
@@ -325,7 +397,7 @@ function renderHistory(history) {
     const title = document.createElement("strong");
     title.textContent = (item.sections?.tldr || item.summary || "Saved summary").slice(0, 110);
     const meta = document.createElement("small");
-    meta.textContent = `${formatDate(item.createdAt)} · ${item.model || "Gemini"}`;
+    meta.textContent = `${formatDate(item.createdAt)} · ${item.provider || "AI"} / ${item.model || "configured model"}`;
     open.append(title, meta);
     const remove = document.createElement("button");
     remove.type = "button";
@@ -360,6 +432,11 @@ async function handleHistoryClick(event) {
         lengthControl.value = item.settings.length || "standard";
         toneControl.value = item.settings.tone || "neutral";
         languageControl.value = item.settings.language || "auto";
+        summaryModeControl.value = item.settings.summaryMode || "general";
+        providerControl.value = item.settings.provider || "auto";
+        modelPreferenceControl.value = item.settings.modelPreference || "auto";
+        expertiseControl.value = item.settings.profile?.expertise || "auto";
+        focusAreasControl.value = item.settings.profile?.focusAreas || "";
       }
       lastSummary = item.summary || "";
       lastSections = item.sections || null;
@@ -394,12 +471,19 @@ async function savePreferences() {
     length: lengthControl.value,
     tone: toneControl.value,
     language: languageControl.value,
+    summaryMode: summaryModeControl.value,
+    provider: providerControl.value,
+    modelPreference: modelPreferenceControl.value,
+    expertise: expertiseControl.value,
+    focusAreas: focusAreasControl.value.slice(0, 120),
+    applyFeedback: applyFeedbackControl.checked,
     saveHistory: saveHistoryControl.checked,
     retentionDays: Number(retentionControl.value)
   };
   try {
     await chrome.storage.local.set({ [PREFS_KEY]: prefs });
     renderHistory(await readHistory());
+    await loadFeedbackInsights();
   } catch {
     setStatus("Could not save preferences locally.", true);
   }
@@ -422,7 +506,7 @@ function switchTab(name) {
 async function loadUsage() {
   const button = document.querySelector("#refreshUsageBtn");
   button.disabled = true;
-  document.querySelector("#usageStatus").textContent = "Loading local backend metrics…";
+  document.querySelector("#usageStatus").textContent = "Loading local AI metrics…";
   try {
     const response = await sendRuntimeMessage({ type: "GET_METRICS" });
     if (!response?.ok) throw new Error(response?.error || "Could not load metrics.");
@@ -436,14 +520,18 @@ async function loadUsage() {
     document.querySelector("#metricCache").textContent = formatNumber(m.hits);
     document.querySelector("#metricTokens").textContent = formatNumber(daily.totalTokens ?? m.totalTokens);
     const dailyCost = m.costEstimateConfigured ? Number(daily.estimatedCostUsd || 0) : null;
-    document.querySelector("#metricCost").textContent = dailyCost == null ? "Not configured" : `$${dailyCost.toFixed(6)}`;
+    document.querySelector("#metricCost").textContent = dailyCost == null
+      ? (m.costEstimateIncomplete ? "Incomplete" : "Not configured")
+      : `$${dailyCost.toFixed(6)}`;
     document.querySelector("#metricCostNote").textContent = m.costEstimateConfigured
-      ? "Daily estimate from rates in server/.env; check Google billing for exact charges."
-      : "Set GEMINI_INPUT_USD_PER_1M_TOKENS and GEMINI_OUTPUT_USD_PER_1M_TOKENS in server/.env.";
+      ? "All today's successful calls have provider rates configured; check your provider billing page for exact charges."
+      : m.costEstimateIncomplete
+        ? "Some calls lack token rates or usage data. Configure rates for every provider you use to get a complete estimate."
+        : "Set provider-specific input/output token rates in server/.env to estimate usage.";
     const denominator = Number(m.hits || 0) + Number(m.misses || 0) + Number(m.coalesced || 0);
     const hitRate = denominator ? (Number(m.hits || 0) / denominator * 100).toFixed(1) : "0.0";
     document.querySelector("#metricCacheRate").textContent = `Cache hit rate: ${hitRate}%`;
-    document.querySelector("#metricModel").textContent = `Model: ${m.model || "—"}`;
+    document.querySelector("#metricModel").textContent = `Model: ${m.provider ? `${m.provider} / ` : ""}${m.model || "—"}`;
     document.querySelector("#metricEntries").textContent = `Cached summaries: ${formatNumber(m.cacheEntries)}`;
     const limitText = daily.limitReached
       ? "Daily model-call limit reached"
@@ -468,9 +556,11 @@ async function handleFeedbackClick(event) {
     const stored = await chrome.storage.local.get(FEEDBACK_KEY);
     const entries = Array.isArray(stored[FEEDBACK_KEY]) ? stored[FEEDBACK_KEY] : [];
     if (entries.some((entry) => entry.resultId === currentResultId)) return renderFeedbackState("Thanks — feedback already saved on this device.");
-    const next = [{ id: createId(), resultId: currentResultId, rating: button.dataset.rating, createdAt: new Date().toISOString() }, ...entries].slice(0, MAX_FEEDBACK);
+    const next = [{ id: createId(), resultId: currentResultId, rating: button.dataset.rating,
+      reason: document.querySelector("#feedbackReason").value, createdAt: new Date().toISOString() }, ...entries].slice(0, MAX_FEEDBACK);
     await chrome.storage.local.set({ [FEEDBACK_KEY]: next });
     renderFeedbackState("Thanks — saved only on this device.");
+    await loadFeedbackInsights();
   } catch {
     document.querySelector("#feedbackStatus").textContent = "Could not save feedback locally.";
   }
@@ -478,6 +568,7 @@ async function handleFeedbackClick(event) {
 
 function resetFeedbackState() {
   for (const button of document.querySelectorAll(".feedback-button")) button.disabled = false;
+  document.querySelector("#feedbackReason").value = "";
   document.querySelector("#feedbackStatus").textContent = "Feedback stays on this device.";
   void renderExistingFeedback(currentResultId);
 }
@@ -532,6 +623,13 @@ async function clearAllLocalData() {
     lengthControl.value = "standard";
     toneControl.value = "neutral";
     languageControl.value = "auto";
+    summaryModeControl.value = "general";
+    providerControl.value = "auto";
+    modelPreferenceControl.value = "auto";
+    expertiseControl.value = "auto";
+    focusAreasControl.value = "";
+    applyFeedbackControl.checked = false;
+    document.querySelector("#feedbackReason").value = "";
     retentionControl.value = "30";
     updateCount();
     renderHistory([]);
@@ -541,6 +639,65 @@ async function clearAllLocalData() {
   } catch {
     setStatus("Could not delete all local data. Try again.", true);
   }
+}
+
+async function loadCapabilities() {
+  const previous = providerControl.value;
+  try {
+    const response = await sendRuntimeMessage({ type: "GET_CAPABILITIES" });
+    if (!response?.ok) throw new Error(response?.error || "Could not read AI provider settings.");
+    const providers = Array.isArray(response.capabilities?.providers) ? response.capabilities.providers : [];
+    providerControl.replaceChildren();
+    addProviderOption("auto", "Auto (recommended)");
+    for (const item of providers) addProviderOption(item.id, `${item.label} · ${item.model}`);
+    if (previous === "auto" || providers.some((item) => item.id === previous)) providerControl.value = previous;
+    else providerControl.value = response.capabilities?.defaultProvider || "auto";
+    if (!providers.length) setStatus("No AI provider is configured. Add a provider key to server/.env.", true);
+  } catch {
+    // Keep a usable static fallback if the local server is stopped during popup startup.
+    providerControl.replaceChildren();
+    addProviderOption("auto", "Auto (start local backend)");
+    addProviderOption("gemini", "Google Gemini (check server/.env)");
+    addProviderOption("openai", "OpenAI (check server/.env)");
+    addProviderOption("anthropic", "Anthropic (check server/.env)");
+    providerControl.value = previous || "auto";
+  }
+}
+
+function addProviderOption(value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  providerControl.append(option);
+}
+
+async function getFeedbackGuidance() {
+  const stored = await chrome.storage.local.get(FEEDBACK_KEY);
+  const entries = Array.isArray(stored[FEEDBACK_KEY]) ? stored[FEEDBACK_KEY] : [];
+  const counts = new Map();
+  for (const entry of entries) {
+    if (entry?.rating !== "not-useful" || !entry.reason) continue;
+    counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
+  }
+  const guidance = {
+    "too-vague": "Be more specific and make the important details explicit.",
+    "missed-tech": "Preserve technical details, terminology, architecture, and trade-offs present in the post.",
+    "too-long": "Be concise and remove redundant detail.",
+    inaccurate: "Be strict about source fidelity; omit uncertain information rather than infer."
+  };
+  const [reason, count] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] || [];
+  return reason && count >= 2 ? guidance[reason] || "" : "";
+}
+
+async function loadFeedbackInsights() {
+  const stored = await chrome.storage.local.get(FEEDBACK_KEY);
+  const entries = Array.isArray(stored[FEEDBACK_KEY]) ? stored[FEEDBACK_KEY] : [];
+  const useful = entries.filter((entry) => entry.rating === "useful").length;
+  const notUseful = entries.filter((entry) => entry.rating === "not-useful").length;
+  const guidance = await getFeedbackGuidance();
+  const text = `Saved locally: ${useful} useful · ${notUseful} not useful. ${guidance ? "A repeated improvement preference is ready to apply." : "More consistent feedback is needed before suggesting an adaptation."}`;
+  const target = document.querySelector("#feedbackInsights");
+  if (target) target.textContent = text;
 }
 
 async function sendRuntimeMessage(message) {

@@ -4,7 +4,9 @@ import { MAX_CHARS, validateRequest } from "../src/validation.js";
 
 test("accepts trimmed text and defaults", () => {
   assert.deepEqual(validateRequest({ text: "  Hello world  " }), {
-    ok: true, text: "Hello world", length: "standard", tone: "neutral", language: "auto"
+    ok: true, text: "Hello world", length: "standard", tone: "neutral", language: "auto",
+    mode: "general", provider: "auto", modelPreference: "auto",
+    profile: { expertise: "auto", focusAreas: "", feedbackHints: "" }
   });
 });
 
@@ -23,5 +25,9 @@ test("rejects unsupported controls and unexpected fields", () => {
   assert.equal(validateRequest({ text: "x", length: "huge" }).ok, false);
   assert.equal(validateRequest({ text: "x", tone: "sarcastic" }).ok, false);
   assert.equal(validateRequest({ text: "x", language: "xx" }).ok, false);
+  assert.equal(validateRequest({ text: "x", mode: "unknown" }).ok, false);
+  assert.equal(validateRequest({ text: "x", provider: "unknown" }).ok, false);
+  assert.equal(validateRequest({ text: "x", modelPreference: "cheap" }).ok, false);
+  assert.equal(validateRequest({ text: "x", profile: { focusAreas: "a".repeat(121) } }).ok, false);
   assert.equal(validateRequest({ text: "x", debug: true }).ok, false);
 });

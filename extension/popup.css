@@ -76,3 +76,10 @@ body{max-height:760px}
 kbd{display:inline-block;padding:1px 5px;border:1px solid color-mix(in srgb,CanvasText 22%,transparent);border-radius:4px;color:CanvasText;background:color-mix(in srgb,Canvas 90%,CanvasText 10%);font:10px ui-monospace,SFMono-Regular,monospace}
 code{font-size:10px;overflow-wrap:anywhere}
 button:disabled{opacity:.55;cursor:not-allowed}
+
+/* V9: advanced AI and local search controls */
+.search-input,input[type="text"]{width:100%;padding:8px 9px;border:1px solid color-mix(in srgb,CanvasText 18%,transparent);border-radius:8px;background:Canvas;color:CanvasText;font:inherit;font-size:11px;margin:0 0 10px}
+.feedback-row select{max-width:150px;padding:4px 6px;border:1px solid color-mix(in srgb,CanvasText 18%,transparent);border-radius:7px;background:Canvas;color:CanvasText;font:inherit;font-size:9px}
+.inline-check{display:flex;align-items:flex-start;gap:7px;margin-top:10px;font-size:10px;font-weight:600}
+.inline-check input{margin:2px 0 0;accent-color:#2563eb}
+#feedbackInsights{margin-top:8px}

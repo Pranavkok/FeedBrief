@@ -1,13 +1,14 @@
 {
   "name": "linkedin-tldr-local-server",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "test": "node --test",
-    "release": "node scripts/build-release.mjs"
+    "release": "node scripts/build-release.mjs",
+    "eval": "node scripts/evaluate.js"
   },
   "engines": {
     "node": ">=20"

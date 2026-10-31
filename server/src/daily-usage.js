@@ -29,17 +29,21 @@ export function createDailyUsageStore({
       if (error?.code !== "ENOENT" && error?.name !== "SyntaxError") throw error;
       state = freshState();
     }
+    if (state && typeof state === "object" && state.unpricedCalls === undefined && Number.isSafeInteger(state.modelCalls)) {
+      // Older V6/V7 state did not track pricing coverage; treat prior calls as unpriced.
+      state.unpricedCalls = state.modelCalls;
+    }
     if (!isValidState(state)) state = freshState();
     await rotateIfNeeded();
   }
 
   function freshState() {
-    return { date: utcDate(), modelCalls: 0, promptTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0 };
+    return { date: utcDate(), modelCalls: 0, unpricedCalls: 0, promptTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCostUsd: 0 };
   }
 
   function isValidState(value) {
     return value && typeof value === "object" && /^\d{4}-\d{2}-\d{2}$/.test(value.date)
-      && ["modelCalls", "promptTokens", "outputTokens", "totalTokens"].every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0)
+      && ["modelCalls", "unpricedCalls", "promptTokens", "outputTokens", "totalTokens"].every((key) => Number.isSafeInteger(value[key]) && value[key] >= 0)
       && Number.isFinite(value.estimatedCostUsd) && value.estimatedCostUsd >= 0;
   }
 
@@ -76,13 +80,23 @@ export function createDailyUsageStore({
     });
   }
 
-  async function recordTokens(usage, estimatedCostUsd = 0) {
+  async function recordTokens(usage, estimatedCostUsd = 0, costConfigured = false) {
     return serialize(async () => {
       await ensureLoaded();
       state.promptTokens += safeInt(usage?.promptTokens);
       state.outputTokens += safeInt(usage?.outputTokens);
       state.totalTokens += safeInt(usage?.totalTokens);
       if (Number.isFinite(estimatedCostUsd) && estimatedCostUsd >= 0) state.estimatedCostUsd += estimatedCostUsd;
+      if (!costConfigured) state.unpricedCalls += 1;
+      await persist();
+      return snapshotUnsafe();
+    });
+  }
+
+  async function recordUnpricedCall() {
+    return serialize(async () => {
+      await ensureLoaded();
+      state.unpricedCalls += 1;
       await persist();
       return snapshotUnsafe();
     });
@@ -104,7 +118,7 @@ export function createDailyUsageStore({
     });
   }
 
-  return { reserveModelCall, recordTokens, snapshot };
+  return { reserveModelCall, recordTokens, recordUnpricedCall, snapshot };
 }
 
 function safeInt(value) {

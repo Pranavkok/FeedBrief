@@ -1,0 +1,26 @@
+[
+  {
+    "id": "postgres-index-basics",
+    "mode": "technical",
+    "sourceText": "We reduced a slow PostgreSQL query from 820 ms to 74 ms by adding a composite index on (customer_id, created_at). The query filters by customer_id and sorts by created_at DESC. We checked EXPLAIN ANALYZE before and after. The index increased write overhead slightly, so measure both read and write workloads before adding indexes everywhere.",
+    "expectedTerms": ["postgresql", "composite index", "customer_id", "created_at", "explain analyze", "write overhead"]
+  },
+  {
+    "id": "kafka-consumer-groups",
+    "mode": "technical",
+    "sourceText": "Kafka consumer groups let multiple consumers share a topic's partitions. Each partition is assigned to at most one consumer in a group at a time. Adding consumers beyond the partition count does not increase parallelism for that topic. Rebalances can briefly interrupt processing, so monitor lag and rebalance frequency.",
+    "expectedTerms": ["kafka", "consumer groups", "partitions", "parallelism", "rebalances", "lag"]
+  },
+  {
+    "id": "product-announcement",
+    "mode": "executive",
+    "sourceText": "Today we are opening the beta of our dashboard export feature. Users can download reports as CSV. The beta is available to existing workspace admins first. We plan to collect feedback for two weeks before deciding on general availability.",
+    "expectedTerms": ["beta", "dashboard export", "csv", "workspace admins", "two weeks"]
+  },
+  {
+    "id": "incident-postmortem",
+    "mode": "general",
+    "sourceText": "On Tuesday, an expired TLS certificate caused intermittent failures between our API gateway and the billing service. Requests recovered after certificate rotation. No payment records were lost, but some checkout attempts failed and had to be retried. We are adding certificate-expiry alerts and a rotation runbook.",
+    "expectedTerms": ["tls certificate", "api gateway", "billing service", "certificate rotation", "checkout", "alerts"]
+  }
+]

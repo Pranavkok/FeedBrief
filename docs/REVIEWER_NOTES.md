@@ -1,21 +1,23 @@
-# Reviewer notes
+# Reviewer notes — LinkedIn TL;DR V9
 
-## Purpose
+This is a local developer/reviewer package, not a hosted consumer service. It uses a Manifest V3 Chrome extension plus a companion Node.js 20+ backend bound to `127.0.0.1:8787`.
 
-The extension summarizes text a user explicitly pastes into its popup. It does not interact with LinkedIn pages.
+## Required setup
 
-## Required local companion
+1. Load the unpacked `extension/` folder from `chrome://extensions`.
+2. Copy the extension ID into `EXTENSION_ID` in `server/.env`.
+3. Configure at least one provider API key in `server/.env` (Gemini, OpenAI, or Anthropic). The API key belongs to the reviewer/test operator and is not bundled.
+4. Run `cd server && npm install && npm test && npm run dev`.
+5. Open the popup, review and accept the V9 provider data-use disclosure, paste non-sensitive sample text, and request a summary.
 
-This 0.7.0 release uses a local Node.js companion backend at `http://127.0.0.1:8787`. A test reviewer needs Node.js 20+, a Gemini API key, and the companion source. The extension is not functional until that service is configured and running.
+## Expected behavior
 
-## Permission review
+- Provider selection lists only provider keys configured in the local backend.
+- Auto routing uses the configured fast/quality routes; no hidden failover occurs.
+- Summary modes include General, Beginner, Technical, and Executive.
+- Structured output may include key concepts, claims, examples, caveats, and action items.
+- History, preferences, and feedback remain in Chrome local storage.
+- History search executes locally and does not call an AI provider.
+- The extension has no LinkedIn host permission, content script, page script, cookies, or feed automation.
 
-- `storage`: optional local history, preferences, one-time data-use acknowledgment, and local usefulness ratings.
-- `http://127.0.0.1:8787/*`: only the user's own local backend.
-- `_execute_action`: opens the extension popup via a keyboard shortcut.
-
-No permission grants access to LinkedIn or general browsing activity.
-
-## Test content
-
-Use harmless sample text only. Do not use the reviewer's real LinkedIn feed, personal data, confidential company information, or live credentials.
+The reviewer can inspect `GET /health`, `GET /api/capabilities`, and `GET /metrics` on the local backend. The capabilities endpoint returns provider names/model IDs only, never API keys.

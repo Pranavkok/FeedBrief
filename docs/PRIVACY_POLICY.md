@@ -1,49 +1,44 @@
-# Privacy Policy — LinkedIn TL;DR
+# Privacy policy — LinkedIn TL;DR V9
 
-_Last updated: October 31, 2026_
+This document describes the local V9 developer release. Before any public distribution, the publisher must replace contact placeholders, host this policy at a public HTTPS URL, and review it against the exact provider(s) offered to users and the applicable Chrome Web Store requirements.
 
-This policy describes the local 0.7.0 developer release of LinkedIn TL;DR. The publisher must replace the product contact section and host this document at a public HTTPS URL before any Chrome Web Store submission.
+## Data submitted for summarization
 
-## What the extension does
+When a user requests a summary, the manually pasted source text, selected summary controls, and selected reader profile preferences are sent from the extension to a Node.js backend running on that user's device. The backend forwards the request to the configured AI provider: Google Gemini, OpenAI, or Anthropic. Only providers for which the local server has an API key are available. The provider's own terms and privacy practices govern its processing of that request.
 
-LinkedIn TL;DR summarizes text that you manually paste into its popup. It does not read LinkedIn pages, scrape feeds, access LinkedIn cookies, or collect page content automatically.
+The extension does not read LinkedIn pages, access LinkedIn cookies, collect feed contents automatically, or use hidden LinkedIn APIs. Users should not paste confidential or sensitive material unless authorized to share it with the configured provider.
 
-## Information processed
+## Local data
 
-When you request a summary, the text you pasted and the summary options you selected are sent from the extension to a Node.js server running on your device. That server sends the submitted text and instructions to Google Gemini to generate the summary. Google's processing is subject to the terms and privacy information that apply to your Google AI/Gemini account and service.
+The following data is stored in Chrome's local extension storage when applicable:
 
-The extension can store the following in `chrome.storage.local` on your device:
+- Optional summary history, including the source text and generated summary.
+- User-selected summary preferences and reader profile (expertise and topic focus).
+- Optional usefulness ratings and feedback reasons.
+- First-run provider data-use consent.
 
-- Summary history, including the source text, only when you turn on the history option.
-- Summary preferences and history-retention settings.
-- Your acknowledgment of the Gemini data-use notice.
-- Optional usefulness ratings. Ratings do not include the source post or summary content and are not transmitted by this extension.
+History and feedback are not synced by this extension. The local history-search feature searches saved material on-device; search queries are not sent to an AI provider.
 
-The local backend stores aggregate daily API-call, token, and optional cost counters in `server/data/daily-usage.json`. It does not write source text or generated summaries to that usage file. Runtime counters shown in the Usage page are also aggregate counters.
+If the user enables **Apply my local feedback**, repeated feedback reasons may be converted into a short preference hint and included in a future provider request. The raw feedback list remains local.
 
-## Sharing
+## Local backend data
 
-Submitted text is shared with Google Gemini only to provide the summary you requested. This local developer build does not send submitted text, summaries, history, or ratings to the extension developer, an analytics provider, or an advertising provider. Do not paste confidential or sensitive content unless you are authorized to share it with the AI provider and accept the provider's applicable terms.
+The backend writes aggregate provider-call counts, token counts, and optional estimated cost to `server/data/daily-usage.json`. It does not write prompts, source posts, summaries, reader profile values, or feedback. The evaluation report stores case IDs, provider/model, scores, and term-coverage metadata only; it does not store source cases or model output text.
 
-## Storage and retention
+## API keys
 
-History is off by default. If enabled, entries are stored locally in your Chrome profile and expire according to your selected setting: 7, 30, or 90 days, or manual deletion. You can delete individual entries, clear all history, export your local data, or delete all extension-local data from Settings. Feedback is stored locally, up to the most recent 100 ratings. Chrome profile backups or device backups may retain previous copies outside the extension's control.
+Provider API keys are stored in the user's local `server/.env` file. They are not included in the extension package and are not transmitted to the extension UI. Do not commit or share `server/.env`.
 
-Daily aggregate usage data is stored by the companion backend on the device and rotates at 00:00 UTC. You can delete `server/data/daily-usage.json` while the server is stopped to remove the persisted daily counters.
+## Network and security
 
-## Security
+The local backend binds to `127.0.0.1`, uses request validation, rate limiting, request timeouts, and an extension-origin check. The origin check is a browser CORS guardrail, not authentication against other local programs. Do not expose the backend to the public internet or forward its port.
 
-The companion server binds to `127.0.0.1` and applies request limits, input validation, timeouts, and browser-origin checks. Keep your Gemini API key in `server/.env`; do not share it. CORS checks are not authentication against other local programs. Do not expose the local server to the public internet or forward its port.
+## Retention and deletion
 
-## Children's privacy
+Users can configure local history retention, export local data, delete individual summaries, clear history, or delete all extension-local data from Settings. Backend aggregate usage can be cleared by stopping the backend and deleting `server/data/daily-usage.json`. Evaluation reports can be deleted from `server/data/`.
 
-This developer release is not designed for children under 13.
+## Contact
 
-## Changes
-
-If data practices change, this policy and the in-product disclosures must be updated before distributing the changed build.
-
-## Publisher contact
-
-**Publisher:** [Add your legal/developer name before publication]  
-**Contact:** [Add a monitored support email or support URL before publication]
+Publisher: [Replace with publisher name]
+Support: [Replace with support email]
+Policy URL: [Replace with hosted HTTPS URL]
