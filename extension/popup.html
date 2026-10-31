@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkedIn TL;DR</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="eyebrow">PRIVATE PROTOTYPE</div>
+      <h1>Post TL;DR</h1>
+      <p class="sub">Paste the post text you want summarized.</p>
+    </header>
+
+    <label for="postText">Post text</label>
+    <textarea id="postText" maxlength="20000" placeholder="Paste a post here…" spellcheck="true"></textarea>
+    <div class="meta"><span id="charCount">0 / 20,000</span><span>Text is sent to your local backend</span></div>
+
+    <button id="summarizeBtn" type="button">Summarize</button>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section id="resultSection" hidden>
+      <div class="result-heading">
+        <h2>Summary</h2>
+        <button id="copyBtn" class="copy" type="button">Copy</button>
+      </div>
+      <div id="result" class="result"></div>
+    </section>
+    <footer>Manual input only · No page scraping or automation</footer>
+  </main>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

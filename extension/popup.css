@@ -1,0 +1,21 @@
+:root { color-scheme: light dark; font: 13px/1.5 system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 360px; background: Canvas; color: CanvasText; }
+.app { padding: 18px; }
+.eyebrow { font-size: 10px; letter-spacing: .12em; font-weight: 700; opacity: .65; }
+h1 { margin: 4px 0 0; font-size: 21px; }
+.sub { margin: 3px 0 16px; color: GrayText; }
+label { display: block; margin-bottom: 6px; font-weight: 650; }
+textarea { width: 100%; min-height: 150px; resize: vertical; padding: 10px; border: 1px solid color-mix(in srgb, CanvasText 22%, transparent); border-radius: 9px; background: Canvas; color: CanvasText; font: inherit; }
+textarea:focus { outline: 2px solid Highlight; outline-offset: 1px; }
+.meta { display: flex; justify-content: space-between; gap: 8px; margin: 5px 0 12px; color: GrayText; font-size: 10px; }
+button { border: 0; border-radius: 8px; padding: 10px 13px; background: #2563eb; color: white; font: inherit; font-weight: 650; cursor: pointer; }
+button:disabled { opacity: .55; cursor: wait; }
+#summarizeBtn { width: 100%; }
+.status { min-height: 18px; margin: 8px 0; color: GrayText; font-size: 11px; }
+.status.error { color: #dc5555; }
+.result-heading { display: flex; align-items: center; justify-content: space-between; }
+h2 { margin: 8px 0; font-size: 14px; }
+.copy { padding: 5px 9px; background: transparent; color: LinkText; }
+.result { white-space: pre-wrap; overflow-wrap: anywhere; padding: 11px; border-radius: 9px; background: color-mix(in srgb, CanvasText 7%, Canvas); }
+footer { margin-top: 15px; color: GrayText; font-size: 10px; text-align: center; }
