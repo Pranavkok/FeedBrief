@@ -27,6 +27,7 @@ test("summarizes, caches duplicates, and reports token/cost metrics", async () =
   const counter = { calls: 0 };
   const app = createApp({
     extensionId,
+    usageFilePath: null,
     generateSummary: fakeGenerator(counter),
     inputRate: 1,
     outputRate: 2
@@ -60,7 +61,7 @@ test("summarizes, caches duplicates, and reports token/cost metrics", async () =
 
 test("separates cache entries when language or settings change", async () => {
   const counter = { calls: 0 };
-  const app = createApp({ extensionId, generateSummary: fakeGenerator(counter) });
+  const app = createApp({ extensionId, usageFilePath: null, generateSummary: fakeGenerator(counter) });
   await withServer(app, async (base) => {
     const headers = { "Content-Type": "application/json", Origin: `chrome-extension://${extensionId}` };
     for (const language of ["auto", "hi"]) {
@@ -75,7 +76,7 @@ test("separates cache entries when language or settings change", async () => {
 });
 
 test("rejects unrelated origins and invalid requests", async () => {
-  const app = createApp({ extensionId, generateSummary: fakeGenerator() });
+  const app = createApp({ extensionId, usageFilePath: null, generateSummary: fakeGenerator() });
   await withServer(app, async (base) => {
     const blocked = await fetch(`${base}/api/summarize`, {
       method: "POST",
@@ -96,6 +97,7 @@ test("rejects unrelated origins and invalid requests", async () => {
 test("returns a timeout response and records the failure", async () => {
   const app = createApp({
     extensionId,
+    usageFilePath: null,
     generateSummary: async () => { const error = new Error("timed out"); error.name = "AbortError"; throw error; }
   });
   await withServer(app, async (base) => {
@@ -109,5 +111,30 @@ test("returns a timeout response and records the failure", async () => {
     const metrics = await (await fetch(`${base}/metrics`)).json();
     assert.equal(metrics.errors, 1);
     assert.equal(metrics.modelCalls, 1);
+  });
+});
+
+test("enforces daily model-call limit while allowing cached responses", async () => {
+  const counter = { calls: 0 };
+  const app = createApp({
+    extensionId,
+    usageFilePath: null,
+    dailyModelCallLimit: 1,
+    generateSummary: fakeGenerator(counter)
+  });
+  await withServer(app, async (base) => {
+    const headers = { "Content-Type": "application/json", Origin: `chrome-extension://${extensionId}` };
+    const payload = { text: "cached even after daily cap", length: "standard", tone: "neutral", language: "auto" };
+    const first = await fetch(`${base}/api/summarize`, { method: "POST", headers, body: JSON.stringify(payload) });
+    assert.equal(first.status, 200);
+    const cacheHit = await fetch(`${base}/api/summarize`, { method: "POST", headers, body: JSON.stringify(payload) });
+    assert.equal(cacheHit.status, 200);
+    const blocked = await fetch(`${base}/api/summarize`, {
+      method: "POST", headers,
+      body: JSON.stringify({ ...payload, text: "a different post must be blocked" })
+    });
+    assert.equal(blocked.status, 429);
+    assert.match((await blocked.json()).error, /daily Gemini call limit/i);
+    assert.equal(counter.calls, 1);
   });
 });

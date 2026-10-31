@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { createApp } from "./app.js";
+import { parseExtensionId } from "./security.js";
 
 const host = "127.0.0.1";
+const extensionId = parseExtensionId(process.env.EXTENSION_ID || "");
+if (!extensionId) {
+  throw new Error("EXTENSION_ID is required. Load extension/ in chrome://extensions, copy its ID, and set EXTENSION_ID in server/.env.");
+}
 const port = parsePort(process.env.PORT || "8787");
 const app = createApp();
 const server = app.listen(port, host, () => {

@@ -6,6 +6,7 @@ import { validateRequest } from "./validation.js";
 import { createSummaryCache } from "./cache.js";
 import { buildPrompt, formatSummary, parseSummary, PROMPT_VERSION } from "./prompt.js";
 import { isAllowedExtensionOrigin, parseExtensionId } from "./security.js";
+import { createDailyUsageStore } from "./daily-usage.js";
 
 export function createApp(options = {}) {
   const app = express();
@@ -19,6 +20,8 @@ export function createApp(options = {}) {
   const inputRate = optionalRate(options.inputRate ?? process.env.GEMINI_INPUT_USD_PER_1M_TOKENS);
   const outputRate = optionalRate(options.outputRate ?? process.env.GEMINI_OUTPUT_USD_PER_1M_TOKENS);
   const cache = options.cache || createSummaryCache({ ttlMs: cacheTtlMs, maxEntries: cacheMaxEntries });
+  const dailyModelCallLimit = nonNegativeInt(options.dailyModelCallLimit ?? process.env.DAILY_MODEL_CALL_LIMIT, 50);
+  const dailyUsage = options.dailyUsage || createDailyUsageStore({ limit: dailyModelCallLimit, filePath: options.usageFilePath });
   const generate = options.generateSummary || generateWithGemini;
   const startedAt = Date.now();
   let requestCount = 0;
@@ -52,19 +55,21 @@ export function createApp(options = {}) {
     message: { error: "Too many requests. Wait a minute and try again." }
   }));
 
-  app.get("/health", (_req, res) => res.json({ ok: true, version: "0.5.0" }));
+  app.get("/health", (_req, res) => res.json({ ok: true, version: "0.7.0" }));
 
-  app.get("/metrics", (_req, res) => {
+  app.get("/metrics", async (_req, res) => {
     const costEstimateConfigured = inputRate !== null && outputRate !== null;
     const estimatedCostUsd = costEstimateConfigured
       ? (promptTokens * inputRate + outputTokens * outputRate) / 1_000_000
       : null;
+    const daily = await dailyUsage.snapshot();
     return res.json({
       requests: requestCount,
       hits: cache.stats.hits,
       misses: cache.stats.misses,
       coalesced: cache.stats.coalesced,
-      modelCalls: cache.stats.modelCalls,
+      modelCalls: daily.modelCalls,
+      daily,
       errors: requestErrors,
       promptTokens,
       outputTokens,
@@ -104,13 +109,24 @@ export function createApp(options = {}) {
 
     try {
       const outcome = await cache.getOrCreate(key, async () => {
+        const reservation = await dailyUsage.reserveModelCall();
+        if (!reservation.allowed) {
+          const limitError = new Error(`Daily Gemini call limit reached (${reservation.limit}). It resets at 00:00 UTC. Increase DAILY_MODEL_CALL_LIMIT in server/.env to change it.`);
+          limitError.status = 429;
+          limitError.code = "DAILY_MODEL_CALL_LIMIT";
+          throw limitError;
+        }
         const generated = await generate({ request, model, apiKey, modelTimeoutMs });
         const rawText = typeof generated === "string" ? generated : generated?.text;
-        const sections = parseSummary(rawText || "");
         const usage = normalizeUsage(generated?.usageMetadata ?? generated?.usage);
+        const estimatedCallCost = inputRate !== null && outputRate !== null
+          ? (usage.promptTokens * inputRate + usage.outputTokens * outputRate) / 1_000_000
+          : 0;
+        await dailyUsage.recordTokens(usage, estimatedCallCost);
         promptTokens += usage.promptTokens;
         outputTokens += usage.outputTokens;
         totalTokens += usage.totalTokens;
+        const sections = parseSummary(rawText || "");
         return { sections, usage };
       });
       const sections = outcome.value.sections;
@@ -131,7 +147,7 @@ export function createApp(options = {}) {
       requestErrors++;
       // Log only a safe provider code/name. Never log prompts, post content, or credentials.
       console.error("Summarization failed:", error?.status || error?.code || error?.name || "unknown");
-      const status = error?.name === "AbortError" || error?.name === "TimeoutError" ? 504 : 502;
+      const status = Number.isInteger(error?.status) ? error.status : error?.name === "AbortError" || error?.name === "TimeoutError" ? 504 : 502;
       return res.status(status).json({ error: safeProviderMessage(error) });
     }
   });
@@ -179,9 +195,9 @@ function normalizeUsage(raw = {}) {
   };
 }
 
-function nonNegativeInt(value) {
+function nonNegativeInt(value, fallback = 0) {
   const number = Number(value);
-  return Number.isSafeInteger(number) && number >= 0 ? number : 0;
+  return Number.isSafeInteger(number) && number >= 0 ? number : fallback;
 }
 function positiveInt(value, fallback) {
   const number = Number(value);
@@ -196,6 +212,7 @@ function safeProviderMessage(error) {
   const status = Number(error?.status);
   if (status === 401 || status === 403) return "Gemini authentication failed. Check the API key and project permissions in server/.env.";
   if (status === 404) return "Gemini model was not found or is unavailable to this API project. Check GEMINI_MODEL in server/.env.";
+  if (error?.code === "DAILY_MODEL_CALL_LIMIT") return error.message;
   if (status === 429) return "Gemini rate limit or quota reached. Wait and try again.";
   if (error?.name === "AbortError" || error?.name === "TimeoutError") return "Gemini request timed out. Try again.";
   if (error?.message?.includes("invalid structured response") || error?.message?.includes("unexpected format") || error?.message?.includes("empty summary")) return error.message;

@@ -55,3 +55,24 @@ select{width:100%;padding:7px 9px;border:1px solid color-mix(in srgb,CanvasText 
 .usage-details{display:grid;gap:4px;margin-top:12px;color:GrayText;font-size:10px}
 footer{display:flex;justify-content:center;gap:6px;margin-top:16px;color:GrayText;font-size:9px}
 [hidden]{display:none!important}
+
+/* V6/V7 product-readiness controls */
+body{max-height:760px}
+.tabs{grid-template-columns:repeat(4,1fr)}
+.tab{padding:7px 4px}
+.consent-card,.settings-card{border:1px solid color-mix(in srgb,CanvasText 15%,transparent);border-radius:10px;padding:11px;margin:0 0 12px;background:color-mix(in srgb,Canvas 96%,CanvasText 4%)}
+.consent-card p:not(.eyebrow),.settings-card p{font-size:10px;color:GrayText;margin:6px 0 0;line-height:1.55}
+.consent-card strong,.settings-card strong{font-size:11px;color:CanvasText}
+.consent-check{display:flex;align-items:flex-start;gap:7px;margin-top:10px;font-size:11px;font-weight:650;cursor:pointer}
+.consent-check input{margin:2px 0 0;accent-color:#2563eb}
+.feedback-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px;color:GrayText;font-size:10px}
+.feedback-button{border:1px solid color-mix(in srgb,CanvasText 18%,transparent);border-radius:20px;background:transparent;color:CanvasText;padding:4px 9px;font:inherit;font-size:10px;cursor:pointer}
+.feedback-button:disabled{opacity:.45;cursor:default}
+.feedback-row small{flex-basis:100%;font-size:9px;color:GrayText}
+.settings-card{margin-bottom:9px}
+.settings-card>label{display:block;margin:9px 0 4px;font-size:10px;font-weight:700}
+.settings-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.danger{border:1px solid #dc555580;border-radius:7px;padding:6px 9px;background:transparent;color:#dc5555;font:inherit;font-size:10px;font-weight:650;cursor:pointer}
+kbd{display:inline-block;padding:1px 5px;border:1px solid color-mix(in srgb,CanvasText 22%,transparent);border-radius:4px;color:CanvasText;background:color-mix(in srgb,Canvas 90%,CanvasText 10%);font:10px ui-monospace,SFMono-Regular,monospace}
+code{font-size:10px;overflow-wrap:anywhere}
+button:disabled{opacity:.55;cursor:not-allowed}

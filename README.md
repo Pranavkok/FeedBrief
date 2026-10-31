@@ -1,45 +1,72 @@
-# LinkedIn TL;DR — Private Prototype (V4 + V5)
+# LinkedIn TL;DR — V6 + V7 (0.7.0)
 
-A local, paste-first Chrome extension for summarizing professional social-media posts. This release builds on the V3 structured-summary/cache implementation with V4 reliability/security improvements and V5 history, personalization, export, and usage features.
+A paste-first Chrome extension that summarizes text the user explicitly submits. It uses a local Node.js companion server and the user's own Google Gemini API key.
 
-> **Platform boundary:** This extension does not read LinkedIn pages, scrape posts, click “see more”, inject controls, automate LinkedIn, or use LinkedIn cookies. You explicitly paste text. This is a private prototype, not an approved LinkedIn integration and not ready for Chrome Web Store distribution. Do not add page access or automation without reviewing current LinkedIn terms and obtaining the required authorization.
+> **Platform boundary:** This project does not read LinkedIn pages, scrape feeds, click “see more”, inject controls, automate LinkedIn, or use LinkedIn cookies. There is no LinkedIn host permission or content script. Text is entered manually. The project is not affiliated with, endorsed by, or an official LinkedIn integration.
 
-## V4 — reliability and hardening
+## What's new
 
-- Server-side upstream request timeout (`MODEL_TIMEOUT_MS`) plus extension-to-backend timeout.
-- Strict request schema: text length, allowed values, and unknown fields are validated.
-- Input size limit (20,000 characters) and JSON body limit (64 KB).
-- Local API accepts browser origins only from valid Chrome extension IDs; optionally pin the exact extension ID using `EXTENSION_ID`.
-- Backend binds to `127.0.0.1` only.
-- API rate limiting, safe provider error messages, graceful shutdown, and no logging of post text or credentials.
-- Cache key includes normalized source text, model, prompt version, summary length, writing style, and language.
-- LRU/TTL cache and single-flight handling for concurrent identical requests.
-- Automated unit and HTTP-level tests for validation, caching, origin rules, timeouts, and metrics.
+### V6 — product readiness
 
-## V5 — user experience and personalization
+- First-run notice asks the user to confirm that submitted text is sent to Google Gemini.
+- Optional usefulness feedback is stored locally only. Ratings do not include source text and are never transmitted.
+- History remains opt-in, with retention settings of 7, 30, 90 days, or manual deletion.
+- Settings supports JSON export of local data and deletion of all extension-local data.
+- `Ctrl+Enter` / `Command+Enter` summarizes while the popup is open.
+- `Ctrl+Shift+L` / `Command+Shift+L` opens the extension popup (the user can remap this in Chrome).
+- A persistent daily Gemini call-attempt limit protects against unexpected API usage. Cache hits do not consume the limit.
+- Daily aggregate model-call, token, and optional cost usage is stored in `server/data/daily-usage.json`. It contains no prompts, source posts, or summaries.
 
-- Opt-in local history: saves both the source text and summary in Chrome extension storage on this device. History is not synced by this extension. You can delete individual entries or clear all history.
-- Summary preferences: concise / standard / detailed; neutral / simple / technical; same language as source / English / Hindi / Marathi / Hinglish.
-- Preferences persist locally in the Chrome profile.
-- Export the current summary as Markdown (`.md`) or plain text (`.txt`).
-- Usage dashboard: request count, Gemini calls, cache hits, cache hit rate, token usage, cached entries, errors, and estimated cost.
-- Cost estimate is optional and depends on the token rates you configure in `.env`. It is an estimate, not a billing statement. Confirm current rates and your actual tier in Google AI Studio before setting them.
+### V7 — distribution preparation
+
+- Manifest V3 release version is `0.7.0`; a 128×128 extension icon is included.
+- `npm run release` creates a Chrome extension upload ZIP with `manifest.json` at its root.
+- Store listing copy, permission justifications, reviewer notes, privacy policy draft, and screenshot capture instructions are included under `docs/` and `store-assets/`.
+- The extension package still requires its companion local backend and the user's Gemini API key. For that reason, this is a **review candidate / developer package, not yet a one-click public consumer release**.
+
+## Architecture
+
+```text
+Chrome popup
+  ├─ chrome.storage.local
+  │    ├─ optional history (source text + summary)
+  │    ├─ preferences + consent state
+  │    └─ local usefulness ratings
+  │
+  └─ extension service worker
+       └─ http://127.0.0.1:8787
+            └─ local Node.js / Express backend
+                 ├─ request validation + rate limiting
+                 ├─ in-memory LRU/TTL cache + single-flight requests
+                 ├─ persistent daily aggregate usage cap/counters
+                 └─ Google Gemini API
+```
+
+No source post or generated summary is written to the backend's daily usage file. The backend must remain bound to loopback; do not expose it on `0.0.0.0` or forward its port.
 
 ## Requirements
 
 - Node.js 20 or newer
 - Chrome / Chromium with Manifest V3 support
-- A Gemini API key for live summarization
+- A Gemini API key for live summaries
 
-## Upgrade from V3 without losing your API key
+## Upgrade from V5
 
-1. Stop the old backend with `Ctrl+C`.
-2. Keep a backup of the V3 folder.
-3. Extract this ZIP to a **new** folder first. Do not overwrite your current `server/.env`.
-4. Copy your existing `server/.env` into this package's `server/` folder. Keep your API key private; do not paste it into chat or screenshots.
-5. Open Chrome at `chrome://extensions`, enable Developer mode, and use **Load unpacked** to select this package's `extension/` folder. Note the extension ID shown by Chrome.
-6. Open `server/.env` and preserve your working `GEMINI_MODEL`. Set `EXTENSION_ID=your_32_character_id` to restrict browser requests to this extension. You may copy the optional settings from `.env.example` if they are missing. Leave `EXTENSION_ID` blank only for local development when you accept that other Chrome extensions may also make requests to the local server.
-7. Install and test the backend:
+1. Stop the V5 backend with `Ctrl+C`.
+2. Keep a backup of your V5 folder.
+3. Extract this ZIP to a **new folder**. Do not overwrite your old `server/.env`.
+4. Copy your V5 `server/.env` into this version's `server/` folder. Keep the API key private.
+5. Open `chrome://extensions`, enable Developer mode, and use **Load unpacked** to select this version's `extension/` folder.
+6. Copy the extension ID displayed by Chrome into `EXTENSION_ID` in `server/.env`. This is required at startup. The ID may change when loading the extension from a different folder.
+7. Add this setting to `server/.env` if it is not already there:
+
+```env
+DAILY_MODEL_CALL_LIMIT=50
+```
+
+Set it to `0` for unlimited model-call attempts. This limit resets at 00:00 UTC. Cached results do not consume a call.
+
+8. Install and start the backend:
 
 ```bash
 cd server
@@ -48,80 +75,72 @@ npm test
 npm run dev
 ```
 
-8. Check `http://127.0.0.1:8787/health` in a browser. It should return `{ "ok": true, "version": "0.5.0" }`.
+9. Check `http://127.0.0.1:8787/health`. It should return `ok: true` and version `0.7.0`.
+10. Open the extension, read and accept the Gemini data-use notice, then paste a harmless test post.
 
-The extension ID may differ when loading it from a different folder/location. If it changes, update `EXTENSION_ID` in `server/.env` and restart the backend.
+Your V5 `chrome.storage.local` history/preferences keys remain available only when Chrome assigns this build the same extension ID (normally by loading the new files from the exact same unpacked-extension folder path). If you load it from a different path and Chrome gives it a new ID, the old extension data will not automatically appear in this build; export your V5 data first as a backup. The first-run data-use confirmation is new and must be accepted once.
 
-## First run
+## First run and controls
 
-1. Paste post text into the extension.
-2. Choose length, writing style, and summary language.
-3. Turn on **Save history on this device** only when you want the source text and summary retained locally.
-4. Click **Summarize post**.
-5. Use **Export .md** or **Export .txt** to save the summary.
-6. Open **Usage** to inspect backend counters. Stats reset when the server restarts.
+1. Accept the disclosure that submitted text is sent to Google Gemini.
+2. Paste post text manually.
+3. Select length, style, and language.
+4. Turn on **Save history on this device** only when you want source text and summaries retained locally.
+5. Use **Settings** to set retention, export local data, or delete all extension-local data.
+6. Rate a summary as Useful / Not useful; the rating is stored locally and is not sent anywhere.
+7. Use **Usage** to view the UTC-day call limit, tokens, cache hits, and optional daily cost estimate.
 
-## Cost estimates
+## Backend configuration
 
-The backend records `promptTokenCount`, `candidatesTokenCount`, and thinking tokens when the model returns usage metadata. It estimates cost as:
+`server/.env.example` contains all configuration options. Important settings:
 
-`(prompt tokens × input USD rate + output tokens × output USD rate) / 1,000,000`
+- `GEMINI_API_KEY`: your private Gemini key.
+- `GEMINI_MODEL`: model available to your Gemini API project. Preserve your working model setting when upgrading.
+- `EXTENSION_ID`: the 32-character Chrome extension ID; configure this after loading the new folder.
+- `DAILY_MODEL_CALL_LIMIT`: daily model-call attempt cap; default 50, `0` means unlimited.
+- `GEMINI_INPUT_USD_PER_1M_TOKENS` and `GEMINI_OUTPUT_USD_PER_1M_TOKENS`: optional token rates for an estimate. Check current Google pricing and your billing tier before setting these.
 
-Set both of these optional variables in `server/.env` using the rates applicable to your model, tier, and billing mode:
+Keep `server/.env` private. `.gitignore` excludes it and the aggregate daily usage file.
 
-```env
-GEMINI_INPUT_USD_PER_1M_TOKENS=
-GEMINI_OUTPUT_USD_PER_1M_TOKENS=
+## Daily usage behavior
+
+- The cap is enforced immediately before a new Gemini API attempt.
+- Cache hits and identical in-flight requests do not reserve another model call.
+- Failed provider attempts count toward the daily cap, because they still attempt a provider request.
+- The count resets at 00:00 UTC.
+- `server/data/daily-usage.json` stores aggregate call/token/cost values only. Stop the backend and delete that file to clear persisted daily aggregates.
+- The extension Usage screen distinguishes the daily persisted counters from process-lifetime request/cache metrics.
+- Cost is only estimated when both rates are configured; it is not a billing statement.
+
+## Chrome Web Store preparation
+
+Read these before attempting publication:
+
+- `docs/CHROME_WEB_STORE.md` — draft listing, single purpose, permission justifications, reviewer steps, remaining publisher actions.
+- `docs/PRIVACY_POLICY.md` — privacy policy draft; replace publisher/contact placeholders and host it at a public HTTPS URL.
+- `docs/REVIEWER_NOTES.md` — companion server and test instructions.
+- `docs/SUPPORT.md` — setup troubleshooting and support-page draft.
+- `store-assets/ASSET_CAPTURE_GUIDE.md` — instructions for real store screenshots.
+
+Build the extension-only upload package from `server/`:
+
+```bash
+npm run release
 ```
 
-Leave both blank to show token usage without a cost estimate. The app does not assume the free tier or hard-code a price. Cached requests do not add new token usage or estimated cost because they do not make an upstream model call.
+This creates `dist/linkedin-tldr-v0.7.0-chrome-store.zip`. The release script uses the system `zip` command (available by default on macOS). It contains only the extension files; the companion server is not inside that upload ZIP. The full project archive contains both.
 
-## Cache behavior
+**Do not publish yet** until you decide how end users and reviewers will install/start the companion backend, host the privacy policy/support pages, supply genuine support details, and capture at least one actual 1280×800 or 640×400 screenshot of the shipped UI.
 
-- Cache is stored in backend memory, not on disk.
-- Default TTL: 30 minutes; default maximum: 200 entries.
-- Same normalized post + same model and preferences returns a cache hit.
-- Simultaneous identical requests share one Gemini call.
-- Changing the language, length, style, model, or prompt version creates a different cache key.
-- Restarting the backend clears the cache and resets usage metrics.
-- `/metrics` reports aggregate counters only; it does not expose post text or secrets.
+## LinkedIn integration status
 
-## API
-
-`POST /api/summarize` accepts:
-
-```json
-{
-  "text": "Post content",
-  "length": "standard",
-  "tone": "neutral",
-  "language": "auto"
-}
-```
-
-Valid `length`: `concise`, `standard`, `detailed`.
-
-Valid `tone`: `neutral`, `simple`, `technical`.
-
-Valid `language`: `auto`, `en`, `hi`, `mr`, `hinglish`.
-
-`GET /health` returns local server status. `GET /metrics` returns counters and optional cost estimate. These endpoints are available only through loopback and allowed extension-origin rules for browser requests.
-
-## Security and privacy notes
-
-- The Gemini key stays in `server/.env`; `.env` is excluded from Git.
-- Backend binds to `127.0.0.1`; no remote host is configured.
-- Browser CORS checks are useful guardrails, not authentication against other local programs. Another process running on your computer can still call a loopback port. Do not expose this server on `0.0.0.0` or forward the port.
-- Set `EXTENSION_ID` to pin requests to this exact Chrome extension origin. CORS origin checks can still be spoofed by non-browser clients; loopback binding is the main boundary.
-- History is opt-in and stored in `chrome.storage.local`. Clearing history removes saved source text and summaries from this extension's local storage. Browser profile backups may retain older data.
-- Submitted post text is sent to Google Gemini by the local backend. Avoid submitting confidential or sensitive content unless you have permission and are comfortable with Google's applicable terms.
-- No accounts, remote telemetry, analytics, linkedIn DOM access, cookies, or remote code.
-- AI summaries can miss nuance or contain errors. Check important details against the source post.
+The extension remains paste-first. LinkedIn's current self-service API permissions include basic profile/email access through OpenID Connect and `w_member_social` for sharing; these do not provide general feed/post reading. Other API products are subject to approval or partner programs. Do not add scraping, DOM selectors, content scripts, hidden APIs, or cookie reuse as a workaround. See the official API access page linked in `docs/CHROME_WEB_STORE.md`.
 
 ## Project structure
 
 ```text
 extension/
+  icons/icon128.png
   manifest.json
   popup.html
   popup.css
@@ -130,17 +149,20 @@ extension/
 server/
   .env.example
   package.json
+  scripts/build-release.mjs
   src/
     app.js
     cache.js
+    daily-usage.js
     index.js
     prompt.js
     security.js
     validation.js
   test/
-    app.test.js
-    cache.test.js
-    prompt.test.js
-    security.test.js
-    validation.test.js
+docs/
+  CHROME_WEB_STORE.md
+  PRIVACY_POLICY.md
+  REVIEWER_NOTES.md
+store-assets/
+  ASSET_CAPTURE_GUIDE.md
 ```

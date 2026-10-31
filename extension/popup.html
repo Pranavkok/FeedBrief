@@ -11,7 +11,7 @@
   <main class="app">
     <header class="topbar">
       <div class="brand-mark" aria-hidden="true">TL</div>
-      <div><p class="eyebrow">PRIVATE WORKSPACE</p><h1>LinkedIn TL;DR</h1></div>
+      <div><p class="eyebrow">POST SUMMARIZER</p><h1>LinkedIn TL;DR</h1></div>
       <span class="local-pill"><i></i> Local</span>
     </header>
     <p class="intro">Get the point without the noise.</p>
@@ -20,9 +20,16 @@
       <button class="tab active" data-tab="summary" type="button" aria-selected="true">Summarize</button>
       <button class="tab" data-tab="history" type="button" aria-selected="false">History</button>
       <button class="tab" data-tab="usage" type="button" aria-selected="false">Usage</button>
+      <button class="tab" data-tab="settings" type="button" aria-selected="false">Settings</button>
     </nav>
 
     <section id="summaryPanel" class="panel active" data-panel="summary">
+      <section id="consentCard" class="consent-card" hidden>
+        <p class="eyebrow">BEFORE YOUR FIRST SUMMARY</p>
+        <p><strong>Your text is sent to Google Gemini.</strong> The local backend sends only the text and summary preferences you submit. History is saved in this Chrome profile only when you turn it on.</p>
+        <label class="consent-check"><input id="consentCheck" type="checkbox"><span>I understand and want to continue.</span></label>
+      </section>
+
       <section class="input-section">
         <div class="section-heading"><label for="postText">Post content</label><button id="clearBtn" class="text-button" type="button">Clear</button></div>
         <textarea id="postText" maxlength="20000" placeholder="Paste the post text here…" spellcheck="true"></textarea>
@@ -37,12 +44,18 @@
 
       <label class="privacy-toggle"><input id="saveHistory" type="checkbox"><span><strong>Save history on this device</strong><small>Stores the pasted text and summary locally. Nothing is synced.</small></span></label>
 
-      <button id="summarizeBtn" class="primary" type="button"><span class="button-label">Summarize post</span><span class="spinner" hidden></span></button>
-      <p id="status" class="status" role="status" aria-live="polite">Ready when you are.</p>
+      <button id="summarizeBtn" class="primary" type="button" disabled><span class="button-label">Summarize post</span><span class="spinner" hidden></span></button>
+      <p id="status" class="status" role="status" aria-live="polite">Confirm the data notice to get started.</p>
 
       <section id="resultSection" class="result-section" hidden>
         <div class="result-top"><div><p class="eyebrow">YOUR QUICK READ</p><h2>Summary</h2></div><button id="copyBtn" class="secondary" type="button">Copy summary</button></div>
         <div id="result" class="result"></div>
+        <div class="feedback-row" id="feedbackRow">
+          <span>Was this useful?</span>
+          <button class="feedback-button" type="button" data-rating="useful" aria-label="This summary was useful">Useful</button>
+          <button class="feedback-button" type="button" data-rating="not-useful" aria-label="This summary was not useful">Not useful</button>
+          <small id="feedbackStatus">Feedback stays on this device.</small>
+        </div>
         <div class="export-row">
           <button id="exportMdBtn" class="secondary" type="button">Export .md</button>
           <button id="exportTxtBtn" class="secondary" type="button">Export .txt</button>
@@ -60,18 +73,43 @@
 
     <section id="usagePanel" class="panel" data-panel="usage" hidden>
       <div class="section-heading"><div><p class="eyebrow">LOCAL BACKEND</p><h2>Usage & cost</h2></div><button id="refreshUsageBtn" class="text-button" type="button">Refresh</button></div>
-      <p id="usageStatus" class="panel-note">Stats are counted since the backend was last started.</p>
+      <p id="usageStatus" class="panel-note">Stats include daily limits and backend counters.</p>
       <div class="metric-grid">
         <article class="metric"><span>Requests</span><strong id="metricRequests">—</strong></article>
-        <article class="metric"><span>Gemini calls</span><strong id="metricCalls">—</strong></article>
+        <article class="metric"><span>Gemini calls today</span><strong id="metricCalls">—</strong><small id="metricDailyLimit">Daily limit: —</small></article>
         <article class="metric"><span>Cache hits</span><strong id="metricCache">—</strong></article>
-        <article class="metric"><span>Total tokens</span><strong id="metricTokens">—</strong></article>
+        <article class="metric"><span>Total tokens today</span><strong id="metricTokens">—</strong></article>
         <article class="metric wide"><span>Estimated API cost (USD)</span><strong id="metricCost">—</strong><small id="metricCostNote">Configure token rates in server/.env to estimate paid usage.</small></article>
       </div>
       <div class="usage-details"><span id="metricCacheRate">Cache hit rate: —</span><span id="metricModel">Model: —</span><span id="metricEntries">Cached summaries: —</span></div>
     </section>
 
-    <footer><span>Manual input only</span><span>·</span><span>No LinkedIn page access</span></footer>
+    <section id="settingsPanel" class="panel" data-panel="settings" hidden>
+      <div class="section-heading"><div><p class="eyebrow">YOUR DATA</p><h2>Privacy & settings</h2></div></div>
+      <div class="settings-card">
+        <strong>History retention</strong>
+        <p>Saved summaries are stored only in this Chrome profile. Older entries are removed when the extension opens.</p>
+        <label for="retentionDays">Delete saved history after</label>
+        <select id="retentionDays"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="0">Keep until I delete it</option></select>
+      </div>
+      <div class="settings-card">
+        <strong>What leaves this device?</strong>
+        <p>When you summarize, the text you pasted and your selected summary options are sent to Google Gemini through the local Node.js backend. The backend stores aggregate usage counters, not post content. Feedback, preferences, and optional history remain in Chrome local storage.</p>
+        <p>No LinkedIn page access, cookies, automatic collection, or remote analytics are used.</p>
+      </div>
+      <div class="settings-card">
+        <strong>Data controls</strong>
+        <p>Export includes saved source text and summaries. Keep the file private.</p>
+        <div class="settings-actions"><button id="exportDataBtn" class="secondary" type="button">Export my data</button><button id="clearAllDataBtn" class="danger" type="button">Delete all local data</button></div>
+      </div>
+      <div class="settings-card">
+        <strong>Keyboard shortcuts</strong>
+        <p><kbd>Ctrl</kbd> + <kbd>Enter</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd> summarizes while this popup is open.</p>
+        <p><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd> opens the extension on Windows/Linux. On Mac use <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd>. You can change this in <code>chrome://extensions/shortcuts</code>.</p>
+      </div>
+    </section>
+
+    <footer><span>Manual input only</span><span>·</span><span>No LinkedIn page access</span><span>·</span><span>V0.7.0</span></footer>
   </main>
   <script src="popup.js" type="module"></script>
 </body>

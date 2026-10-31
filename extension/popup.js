@@ -1,7 +1,10 @@
 const MAX_CHARS = 20_000;
 const MAX_HISTORY = 40;
+const MAX_FEEDBACK = 100;
 const HISTORY_KEY = "tldrHistoryV5";
 const PREFS_KEY = "tldrPreferencesV5";
+const CONSENT_KEY = "tldrGeminiDisclosureAcceptedV6";
+const FEEDBACK_KEY = "tldrFeedbackV6";
 
 const input = document.querySelector("#postText");
 const count = document.querySelector("#charCount");
@@ -15,18 +18,30 @@ const lengthControl = document.querySelector("#length");
 const toneControl = document.querySelector("#tone");
 const languageControl = document.querySelector("#language");
 const saveHistoryControl = document.querySelector("#saveHistory");
+const retentionControl = document.querySelector("#retentionDays");
+const consentCard = document.querySelector("#consentCard");
+const consentCheck = document.querySelector("#consentCheck");
 const resultInfo = document.querySelector("#resultInfo");
 const resultUsage = document.querySelector("#resultUsage");
 const historyList = document.querySelector("#historyList");
 let lastSummary = "";
 let lastSections = null;
 let lastResponse = null;
+let currentResultId = "";
+let consentAccepted = false;
 let busy = false;
 
 void initialize();
 
 async function initialize() {
+  updateConsentUI();
   input.addEventListener("input", updateCount);
+  input.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      void summarize();
+    }
+  });
   document.querySelector("#clearBtn").addEventListener("click", clearInput);
   submit.addEventListener("click", summarize);
   document.querySelector("#copyBtn").addEventListener("click", copySummary);
@@ -35,24 +50,57 @@ async function initialize() {
   document.querySelector("#exportTxtBtn").addEventListener("click", () => exportSummary("txt"));
   document.querySelector("#clearHistoryBtn").addEventListener("click", clearHistory);
   document.querySelector("#refreshUsageBtn").addEventListener("click", loadUsage);
+  document.querySelector("#exportDataBtn").addEventListener("click", exportLocalData);
+  document.querySelector("#clearAllDataBtn").addEventListener("click", clearAllLocalData);
   historyList.addEventListener("click", handleHistoryClick);
+  document.querySelector("#feedbackRow").addEventListener("click", handleFeedbackClick);
   document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
-  for (const control of [lengthControl, toneControl, languageControl, saveHistoryControl]) {
+  for (const control of [lengthControl, toneControl, languageControl, saveHistoryControl, retentionControl]) {
     control.addEventListener("change", savePreferences);
   }
+  consentCheck.addEventListener("change", saveConsent);
 
   try {
-    const stored = await chrome.storage.local.get([HISTORY_KEY, PREFS_KEY]);
+    const stored = await chrome.storage.local.get([HISTORY_KEY, PREFS_KEY, CONSENT_KEY]);
     const prefs = stored[PREFS_KEY] || {};
     if (["concise", "standard", "detailed"].includes(prefs.length)) lengthControl.value = prefs.length;
     if (["neutral", "simple", "technical"].includes(prefs.tone)) toneControl.value = prefs.tone;
     if (["auto", "en", "hi", "mr", "hinglish"].includes(prefs.language)) languageControl.value = prefs.language;
+    if ([7, 30, 90, 0].includes(Number(prefs.retentionDays))) retentionControl.value = String(prefs.retentionDays);
     saveHistoryControl.checked = prefs.saveHistory === true;
-    renderHistory(Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : []);
+    consentAccepted = stored[CONSENT_KEY] === true;
+    consentCheck.checked = consentAccepted;
+    updateConsentUI();
+    const existingHistory = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
+    const cleanHistory = pruneHistory(existingHistory);
+    renderHistory(cleanHistory);
+    if (cleanHistory.length !== existingHistory.length) await chrome.storage.local.set({ [HISTORY_KEY]: cleanHistory });
   } catch {
-    setStatus("Local extension storage is unavailable. History and preferences may not persist.", true);
+    updateConsentUI();
+    setStatus("Local extension storage is unavailable. Enable extension storage to continue.", true);
   }
   updateCount();
+}
+
+function updateConsentUI() {
+  consentCard.hidden = consentAccepted;
+  submit.disabled = !consentAccepted || busy;
+  if (consentAccepted) setStatus("Ready when you are.");
+}
+
+async function saveConsent() {
+  consentAccepted = consentCheck.checked;
+  try {
+    if (consentAccepted) await chrome.storage.local.set({ [CONSENT_KEY]: true });
+    else await chrome.storage.local.remove(CONSENT_KEY);
+    updateConsentUI();
+    if (consentAccepted) setStatus("Thanks. Paste a post when you're ready.", false, true);
+  } catch {
+    consentAccepted = false;
+    consentCheck.checked = false;
+    updateConsentUI();
+    setStatus("Could not save your privacy confirmation locally.", true);
+  }
 }
 
 function updateCount() {
@@ -66,12 +114,13 @@ function clearInput() {
   lastSummary = "";
   lastSections = null;
   lastResponse = null;
+  currentResultId = "";
   setStatus("Cleared.");
   input.focus();
 }
 
 async function summarize() {
-  if (busy) return;
+  if (busy || !consentAccepted) return;
   const text = input.value.trim();
   if (!text) return setStatus("Paste some post text first.", true);
   if (text.length > MAX_CHARS) return setStatus(`Text exceeds the ${MAX_CHARS.toLocaleString()} character limit.`, true);
@@ -94,8 +143,10 @@ async function summarize() {
     lastSummary = response.summary;
     lastSections = response.sections || null;
     lastResponse = response;
+    currentResultId = createId();
     renderSummary(lastSections, lastSummary);
     resultSection.hidden = false;
+    resetFeedbackState();
     const elapsed = response.durationMs ?? Math.round(performance.now() - started);
     const sourceLabel = response.cache === "HIT" ? "Cache hit" : response.cache === "COALESCED" ? "Shared request" : "Generated";
     resultInfo.textContent = `${sourceLabel} · ${elapsed} ms`;
@@ -105,7 +156,7 @@ async function summarize() {
     if (saveHistoryControl.checked) {
       try {
         await saveHistory({
-          id: createId(),
+          id: currentResultId,
           createdAt: new Date().toISOString(),
           sourceText: text,
           summary: response.summary,
@@ -116,7 +167,7 @@ async function summarize() {
           usage: response.usage || null
         });
       } catch {
-        setStatus("Summary ready, but the history could not be saved. Check extension storage space.", true);
+        setStatus("Summary ready, but history could not be saved. Check extension storage space.", true);
       }
     }
   } catch (error) {
@@ -166,7 +217,7 @@ function addSection(title, content, tag) {
 
 function setBusy(value) {
   busy = value;
-  submit.disabled = value;
+  submit.disabled = value || !consentAccepted;
   spinner.hidden = !value;
   buttonLabel.textContent = value ? "Summarizing…" : "Summarize post";
   input.disabled = value;
@@ -202,16 +253,7 @@ async function copySource() {
 function exportSummary(format) {
   if (!lastSummary) return;
   const content = format === "md" ? toMarkdown(lastSections, lastSummary) : lastSummary;
-  const mime = format === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8";
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `linkedin-tldr-${new Date().toISOString().slice(0, 10)}.${format}`;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  downloadFile(content, `linkedin-tldr-${new Date().toISOString().slice(0, 10)}.${format}`, format === "md" ? "text/markdown;charset=utf-8" : "text/plain;charset=utf-8");
   setStatus(`Exported ${format.toUpperCase()} summary.`, false, true);
 }
 
@@ -225,17 +267,42 @@ function toMarkdown(sections, fallback) {
   return lines.join("\n");
 }
 
+function downloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 async function saveHistory(entry) {
-  const stored = await chrome.storage.local.get(HISTORY_KEY);
-  const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
-  const next = [entry, ...history.filter((item) => item?.id !== entry.id)].slice(0, MAX_HISTORY);
+  const history = await readHistory();
+  const next = pruneHistory([entry, ...history.filter((item) => item?.id !== entry.id)]).slice(0, MAX_HISTORY);
   await chrome.storage.local.set({ [HISTORY_KEY]: next });
   renderHistory(next);
 }
 
 async function readHistory() {
   const stored = await chrome.storage.local.get(HISTORY_KEY);
-  return Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
+  const history = Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [];
+  const clean = pruneHistory(history);
+  if (clean.length !== history.length) await chrome.storage.local.set({ [HISTORY_KEY]: clean });
+  return clean;
+}
+
+function pruneHistory(history) {
+  const retentionDays = Number(retentionControl.value || 30);
+  const valid = history.filter((item) => item && typeof item.id === "string" && typeof item.summary === "string");
+  if (retentionDays === 0) return valid.slice(0, MAX_HISTORY);
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  return valid.filter((item) => {
+    const created = Date.parse(item.createdAt);
+    return Number.isFinite(created) && created >= cutoff;
+  }).slice(0, MAX_HISTORY);
 }
 
 function renderHistory(history) {
@@ -276,41 +343,50 @@ async function handleHistoryClick(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const { action, id } = button.dataset;
-  const history = await readHistory();
-  const item = history.find((entry) => entry.id === id);
-  if (!item) return renderHistory(history);
-
-  if (action === "delete") {
-    const next = history.filter((entry) => entry.id !== id);
-    await chrome.storage.local.set({ [HISTORY_KEY]: next });
-    renderHistory(next);
-    return;
-  }
-  if (action === "open") {
-    input.value = item.sourceText || "";
-    updateCount();
-    if (item.settings) {
-      lengthControl.value = item.settings.length || "standard";
-      toneControl.value = item.settings.tone || "neutral";
-      languageControl.value = item.settings.language || "auto";
+  try {
+    const history = await readHistory();
+    const item = history.find((entry) => entry.id === id);
+    if (!item) return renderHistory(history);
+    if (action === "delete") {
+      const next = history.filter((entry) => entry.id !== id);
+      await chrome.storage.local.set({ [HISTORY_KEY]: next });
+      renderHistory(next);
+      return;
     }
-    lastSummary = item.summary || "";
-    lastSections = item.sections || null;
-    lastResponse = item;
-    renderSummary(lastSections, lastSummary);
-    resultSection.hidden = !lastSummary;
-    resultInfo.textContent = `Saved · ${formatDate(item.createdAt)}`;
-    resultUsage.textContent = formatUsage(item.usage);
-    switchTab("summary");
-    setStatus("Loaded a saved summary.", false, true);
+    if (action === "open") {
+      input.value = item.sourceText || "";
+      updateCount();
+      if (item.settings) {
+        lengthControl.value = item.settings.length || "standard";
+        toneControl.value = item.settings.tone || "neutral";
+        languageControl.value = item.settings.language || "auto";
+      }
+      lastSummary = item.summary || "";
+      lastSections = item.sections || null;
+      lastResponse = item;
+      currentResultId = item.id;
+      renderSummary(lastSections, lastSummary);
+      resultSection.hidden = !lastSummary;
+      resultInfo.textContent = `Saved · ${formatDate(item.createdAt)}`;
+      resultUsage.textContent = formatUsage(item.usage);
+      await renderExistingFeedback(currentResultId);
+      switchTab("summary");
+      setStatus("Loaded a saved summary.", false, true);
+    }
+  } catch {
+    setStatus("Could not update local history. Try again.", true);
   }
 }
 
 async function clearHistory() {
   if (!confirm("Delete all saved summaries from this device?")) return;
-  await chrome.storage.local.remove(HISTORY_KEY);
-  renderHistory([]);
-  setStatus("Local history cleared.", false, true);
+  try {
+    await chrome.storage.local.remove(HISTORY_KEY);
+    renderHistory([]);
+    setStatus("Local history cleared.", false, true);
+  } catch {
+    setStatus("Could not clear local history.", true);
+  }
 }
 
 async function savePreferences() {
@@ -318,10 +394,15 @@ async function savePreferences() {
     length: lengthControl.value,
     tone: toneControl.value,
     language: languageControl.value,
-    saveHistory: saveHistoryControl.checked
+    saveHistory: saveHistoryControl.checked,
+    retentionDays: Number(retentionControl.value)
   };
-  try { await chrome.storage.local.set({ [PREFS_KEY]: prefs }); }
-  catch { setStatus("Could not save preferences locally.", true); }
+  try {
+    await chrome.storage.local.set({ [PREFS_KEY]: prefs });
+    renderHistory(await readHistory());
+  } catch {
+    setStatus("Could not save preferences locally.", true);
+  }
 }
 
 function switchTab(name) {
@@ -331,11 +412,10 @@ function switchTab(name) {
     tab.setAttribute("aria-selected", String(active));
   }
   for (const panel of document.querySelectorAll("[data-panel]")) {
-    const active = panel.dataset.panel === name;
-    panel.hidden = !active;
-    panel.classList.toggle("active", active);
+    panel.hidden = panel.dataset.panel !== name;
+    panel.classList.toggle("active", panel.dataset.panel === name);
   }
-  if (name === "history") void readHistory().then(renderHistory).catch(() => {});
+  if (name === "history") void readHistory().then(renderHistory).catch(() => setStatus("Could not load local history.", true));
   if (name === "usage") void loadUsage();
 }
 
@@ -347,25 +427,119 @@ async function loadUsage() {
     const response = await sendRuntimeMessage({ type: "GET_METRICS" });
     if (!response?.ok) throw new Error(response?.error || "Could not load metrics.");
     const m = response.metrics;
+    const daily = m.daily || {};
     document.querySelector("#metricRequests").textContent = formatNumber(m.requests);
-    document.querySelector("#metricCalls").textContent = formatNumber(m.modelCalls);
+    document.querySelector("#metricCalls").textContent = formatNumber(daily.modelCalls ?? m.modelCalls);
+    document.querySelector("#metricDailyLimit").textContent = daily.limit > 0
+      ? `${formatNumber(daily.remaining)} calls left · resets at 00:00 UTC`
+      : "No daily limit configured";
     document.querySelector("#metricCache").textContent = formatNumber(m.hits);
-    document.querySelector("#metricTokens").textContent = formatNumber(m.totalTokens);
-    document.querySelector("#metricCost").textContent = m.estimatedCostUsd == null ? "Not configured" : `$${Number(m.estimatedCostUsd).toFixed(6)}`;
+    document.querySelector("#metricTokens").textContent = formatNumber(daily.totalTokens ?? m.totalTokens);
+    const dailyCost = m.costEstimateConfigured ? Number(daily.estimatedCostUsd || 0) : null;
+    document.querySelector("#metricCost").textContent = dailyCost == null ? "Not configured" : `$${dailyCost.toFixed(6)}`;
     document.querySelector("#metricCostNote").textContent = m.costEstimateConfigured
-      ? "Estimated from the token rates configured in server/.env; check your Google billing for exact charges."
+      ? "Daily estimate from rates in server/.env; check Google billing for exact charges."
       : "Set GEMINI_INPUT_USD_PER_1M_TOKENS and GEMINI_OUTPUT_USD_PER_1M_TOKENS in server/.env.";
     const denominator = Number(m.hits || 0) + Number(m.misses || 0) + Number(m.coalesced || 0);
     const hitRate = denominator ? (Number(m.hits || 0) / denominator * 100).toFixed(1) : "0.0";
     document.querySelector("#metricCacheRate").textContent = `Cache hit rate: ${hitRate}%`;
     document.querySelector("#metricModel").textContent = `Model: ${m.model || "—"}`;
     document.querySelector("#metricEntries").textContent = `Cached summaries: ${formatNumber(m.cacheEntries)}`;
-    document.querySelector("#usageStatus").textContent = `Since backend start · ${formatNumber(m.errors)} errors · ${formatNumber(m.coalesced)} coalesced requests`;
+    const limitText = daily.limitReached
+      ? "Daily model-call limit reached"
+      : Number(daily.limit) === 0
+        ? "No daily model-call cap"
+        : Number.isFinite(Number(daily.remaining))
+          ? `${formatNumber(daily.remaining)} calls remaining today`
+          : "Daily cap unavailable";
+    document.querySelector("#usageStatus").textContent = `UTC day ${daily.date || "—"} · ${formatNumber(m.errors)} errors · ${limitText}`;
   } catch (error) {
     document.querySelector("#usageStatus").textContent = error?.message || "Could not load metrics. Is the local server running?";
-    for (const id of ["metricRequests", "metricCalls", "metricCache", "metricTokens", "metricCost"]) document.querySelector(`#${id}`).textContent = "—";
+    for (const id of ["metricRequests", "metricCalls", "metricCache", "metricTokens", "metricCost", "metricDailyLimit"]) document.querySelector(`#${id}`).textContent = "—";
   } finally {
     button.disabled = false;
+  }
+}
+
+async function handleFeedbackClick(event) {
+  const button = event.target.closest("button[data-rating]");
+  if (!button || !currentResultId) return;
+  try {
+    const stored = await chrome.storage.local.get(FEEDBACK_KEY);
+    const entries = Array.isArray(stored[FEEDBACK_KEY]) ? stored[FEEDBACK_KEY] : [];
+    if (entries.some((entry) => entry.resultId === currentResultId)) return renderFeedbackState("Thanks — feedback already saved on this device.");
+    const next = [{ id: createId(), resultId: currentResultId, rating: button.dataset.rating, createdAt: new Date().toISOString() }, ...entries].slice(0, MAX_FEEDBACK);
+    await chrome.storage.local.set({ [FEEDBACK_KEY]: next });
+    renderFeedbackState("Thanks — saved only on this device.");
+  } catch {
+    document.querySelector("#feedbackStatus").textContent = "Could not save feedback locally.";
+  }
+}
+
+function resetFeedbackState() {
+  for (const button of document.querySelectorAll(".feedback-button")) button.disabled = false;
+  document.querySelector("#feedbackStatus").textContent = "Feedback stays on this device.";
+  void renderExistingFeedback(currentResultId);
+}
+
+async function renderExistingFeedback(resultId) {
+  const stored = await chrome.storage.local.get(FEEDBACK_KEY);
+  const entries = Array.isArray(stored[FEEDBACK_KEY]) ? stored[FEEDBACK_KEY] : [];
+  if (entries.some((entry) => entry.resultId === resultId)) {
+    renderFeedbackState("Thanks — feedback already saved on this device.");
+  } else {
+    for (const button of document.querySelectorAll(".feedback-button")) button.disabled = false;
+    document.querySelector("#feedbackStatus").textContent = "Feedback stays on this device.";
+  }
+}
+
+function renderFeedbackState(message) {
+  for (const button of document.querySelectorAll(".feedback-button")) button.disabled = true;
+  document.querySelector("#feedbackStatus").textContent = message;
+}
+
+async function exportLocalData() {
+  if (!confirm("This export contains saved source post text, summaries, and preferences. Keep the file private. Continue?")) return;
+  try {
+    const stored = await chrome.storage.local.get([HISTORY_KEY, PREFS_KEY, FEEDBACK_KEY]);
+    const exportPayload = {
+      exportedAt: new Date().toISOString(),
+      product: "LinkedIn TL;DR",
+      history: Array.isArray(stored[HISTORY_KEY]) ? stored[HISTORY_KEY] : [],
+      preferences: stored[PREFS_KEY] || {},
+      feedback: Array.isArray(stored[FEEDBACK_KEY]) ? stored[FEEDBACK_KEY] : []
+    };
+    downloadFile(`${JSON.stringify(exportPayload, null, 2)}\n`, `linkedin-tldr-data-${new Date().toISOString().slice(0, 10)}.json`, "application/json;charset=utf-8");
+    setStatus("Your local data export is ready.", false, true);
+  } catch {
+    setStatus("Could not export local data.", true);
+  }
+}
+
+async function clearAllLocalData() {
+  if (!confirm("Delete all saved history, feedback, preferences, and this privacy confirmation from this Chrome profile? This cannot be undone.")) return;
+  try {
+    await chrome.storage.local.clear();
+    input.value = "";
+    lastSummary = "";
+    lastSections = null;
+    lastResponse = null;
+    currentResultId = "";
+    resultSection.hidden = true;
+    consentAccepted = false;
+    consentCheck.checked = false;
+    saveHistoryControl.checked = false;
+    lengthControl.value = "standard";
+    toneControl.value = "neutral";
+    languageControl.value = "auto";
+    retentionControl.value = "30";
+    updateCount();
+    renderHistory([]);
+    updateConsentUI();
+    switchTab("summary");
+    setStatus("All local extension data was deleted.", false, true);
+  } catch {
+    setStatus("Could not delete all local data. Try again.", true);
   }
 }
 
