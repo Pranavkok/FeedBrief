@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn TL;DR \u2014 Private Prototype",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Summarize text you explicitly paste into the extension.",
   "action": {
     "default_title": "LinkedIn TL;DR",
@@ -11,9 +11,7 @@
     "service_worker": "service-worker.js",
     "type": "module"
   },
-  "permissions": [
-    "storage"
-  ],
+  "permissions": [],
   "host_permissions": [
     "http://127.0.0.1:8787/*"
   ]

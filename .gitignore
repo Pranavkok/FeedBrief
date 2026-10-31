@@ -3,3 +3,14 @@ node_modules/
 .DS_Store
 *.log
 coverage/
+server/node_modules/
+server/dist/
+server/logs/
+server/logs/*.log
+server/logs/*.log.*
+server/logs/*.log.*.*
+server/logs/*.log.*.*.*
+server/logs/*.log.*.*.*.*
+server/logs/*.log.*.*.*.*.*
+server/logs/*.log.*.*.*.*.*.*
+server/.env
