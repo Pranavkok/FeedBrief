@@ -14,27 +14,63 @@
       <div><p class="eyebrow">PRIVATE WORKSPACE</p><h1>LinkedIn TL;DR</h1></div>
       <span class="local-pill"><i></i> Local</span>
     </header>
-    <p class="intro">Turn a long post into the point, without the noise.</p>
+    <p class="intro">Get the point without the noise.</p>
 
-    <section class="input-section">
-      <div class="section-heading"><label for="postText">Post content</label><button id="clearBtn" class="text-button" type="button">Clear</button></div>
-      <textarea id="postText" maxlength="20000" placeholder="Paste the post text here…" spellcheck="true"></textarea>
-      <div class="input-meta"><span id="charCount">0 / 20,000</span><span>Only text you submit is sent</span></div>
+    <nav class="tabs" aria-label="Workspace sections">
+      <button class="tab active" data-tab="summary" type="button" aria-selected="true">Summarize</button>
+      <button class="tab" data-tab="history" type="button" aria-selected="false">History</button>
+      <button class="tab" data-tab="usage" type="button" aria-selected="false">Usage</button>
+    </nav>
+
+    <section id="summaryPanel" class="panel active" data-panel="summary">
+      <section class="input-section">
+        <div class="section-heading"><label for="postText">Post content</label><button id="clearBtn" class="text-button" type="button">Clear</button></div>
+        <textarea id="postText" maxlength="20000" placeholder="Paste the post text here…" spellcheck="true"></textarea>
+        <div class="input-meta"><span id="charCount">0 / 20,000</span><span>Only submitted text is sent</span></div>
+      </section>
+
+      <section class="controls" aria-label="Summary preferences">
+        <div><label for="length">Length</label><select id="length"><option value="concise">Concise</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select></div>
+        <div><label for="tone">Style</label><select id="tone"><option value="neutral" selected>Neutral</option><option value="simple">Simple</option><option value="technical">Technical</option></select></div>
+        <div class="language-control"><label for="language">Summary language</label><select id="language"><option value="auto" selected>Same as post</option><option value="en">English</option><option value="hi">Hindi</option><option value="mr">Marathi</option><option value="hinglish">Hinglish</option></select></div>
+      </section>
+
+      <label class="privacy-toggle"><input id="saveHistory" type="checkbox"><span><strong>Save history on this device</strong><small>Stores the pasted text and summary locally. Nothing is synced.</small></span></label>
+
+      <button id="summarizeBtn" class="primary" type="button"><span class="button-label">Summarize post</span><span class="spinner" hidden></span></button>
+      <p id="status" class="status" role="status" aria-live="polite">Ready when you are.</p>
+
+      <section id="resultSection" class="result-section" hidden>
+        <div class="result-top"><div><p class="eyebrow">YOUR QUICK READ</p><h2>Summary</h2></div><button id="copyBtn" class="secondary" type="button">Copy summary</button></div>
+        <div id="result" class="result"></div>
+        <div class="export-row">
+          <button id="exportMdBtn" class="secondary" type="button">Export .md</button>
+          <button id="exportTxtBtn" class="secondary" type="button">Export .txt</button>
+          <button id="copySourceBtn" class="text-button" type="button">Copy original</button>
+        </div>
+        <div class="result-meta"><span id="resultInfo"></span><span id="resultUsage"></span></div>
+      </section>
     </section>
 
-    <section class="controls" aria-label="Summary preferences">
-      <div><label for="length">Summary length</label><select id="length"><option value="concise">Concise</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select></div>
-      <div><label for="tone">Writing style</label><select id="tone"><option value="neutral" selected>Neutral</option><option value="technical">Technical</option></select></div>
+    <section id="historyPanel" class="panel" data-panel="history" hidden>
+      <div class="section-heading"><div><p class="eyebrow">ON THIS DEVICE</p><h2>Summary history</h2></div><button id="clearHistoryBtn" class="text-button" type="button">Clear all</button></div>
+      <p class="panel-note">History stays in this Chrome profile. It is not uploaded or synced by this extension.</p>
+      <div id="historyList" class="history-list"><p class="empty-state">No saved summaries yet.</p></div>
     </section>
 
-    <button id="summarizeBtn" class="primary" type="button"><span class="button-label">Summarize post</span><span class="spinner" hidden></span></button>
-    <p id="status" class="status" role="status" aria-live="polite">Ready when you are.</p>
-
-    <section id="resultSection" class="result-section" hidden>
-      <div class="result-top"><div><p class="eyebrow">YOUR QUICK READ</p><h2>Summary</h2></div><button id="copyBtn" class="secondary" type="button">Copy summary</button></div>
-      <div id="result" class="result"></div>
-      <div class="result-meta"><span id="resultInfo"></span><button id="copySourceBtn" class="text-button" type="button">Copy original text</button></div>
+    <section id="usagePanel" class="panel" data-panel="usage" hidden>
+      <div class="section-heading"><div><p class="eyebrow">LOCAL BACKEND</p><h2>Usage & cost</h2></div><button id="refreshUsageBtn" class="text-button" type="button">Refresh</button></div>
+      <p id="usageStatus" class="panel-note">Stats are counted since the backend was last started.</p>
+      <div class="metric-grid">
+        <article class="metric"><span>Requests</span><strong id="metricRequests">—</strong></article>
+        <article class="metric"><span>Gemini calls</span><strong id="metricCalls">—</strong></article>
+        <article class="metric"><span>Cache hits</span><strong id="metricCache">—</strong></article>
+        <article class="metric"><span>Total tokens</span><strong id="metricTokens">—</strong></article>
+        <article class="metric wide"><span>Estimated API cost (USD)</span><strong id="metricCost">—</strong><small id="metricCostNote">Configure token rates in server/.env to estimate paid usage.</small></article>
+      </div>
+      <div class="usage-details"><span id="metricCacheRate">Cache hit rate: —</span><span id="metricModel">Model: —</span><span id="metricEntries">Cached summaries: —</span></div>
     </section>
+
     <footer><span>Manual input only</span><span>·</span><span>No LinkedIn page access</span></footer>
   </main>
   <script src="popup.js" type="module"></script>

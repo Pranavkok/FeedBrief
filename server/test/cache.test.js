@@ -1,7 +1,50 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSummaryCache } from "../src/cache.js";
-test("returns cached value for repeated key", async () => { const c = createSummaryCache(); let calls = 0; const factory = async () => ({ value: ++calls }); const a = await c.getOrCreate("k", factory); const b = await c.getOrCreate("k", factory); assert.equal(a.cache, "MISS"); assert.equal(b.cache, "HIT"); assert.deepEqual(b.value, { value: 1 }); assert.equal(c.stats.modelCalls, 1); });
-test("coalesces simultaneous identical requests", async () => { const c = createSummaryCache(); let calls = 0; let release; const gate = new Promise((r) => { release = r; }); const factory = async () => { calls++; await gate; return "one"; }; const a = c.getOrCreate("same", factory); const b = c.getOrCreate("same", factory); release(); const [x,y] = await Promise.all([a,b]); assert.equal(calls, 1); assert.equal(x.value, "one"); assert.equal(y.value, "one"); assert.equal(y.cache, "COALESCED"); });
-test("expires entries and evicts least recently used", async () => { let now = 0; const c = createSummaryCache({ ttlMs: 10, maxEntries: 2, now: () => now }); await c.getOrCreate("a", async () => 1); await c.getOrCreate("b", async () => 2); await c.getOrCreate("a", async () => 9); await c.getOrCreate("c", async () => 3); assert.equal(c.size(), 2); assert.equal((await c.getOrCreate("b", async () => 8)).cache, "MISS"); now = 20; assert.equal((await c.getOrCreate("a", async () => 7)).cache, "MISS"); });
-test("does not cache failed computations", async () => { const c = createSummaryCache(); await assert.rejects(c.getOrCreate("x", async () => { throw Error("no"); })); assert.equal((await c.getOrCreate("x", async () => "ok")).cache, "MISS"); });
+
+test("serves cached results for a repeated key", async () => {
+  const cache = createSummaryCache();
+  let calls = 0;
+  const factory = async () => ({ value: ++calls });
+  const first = await cache.getOrCreate("same", factory);
+  const second = await cache.getOrCreate("same", factory);
+  assert.equal(first.cache, "MISS");
+  assert.equal(second.cache, "HIT");
+  assert.deepEqual(second.value, { value: 1 });
+  assert.equal(cache.stats.modelCalls, 1);
+});
+
+test("coalesces concurrent identical requests", async () => {
+  const cache = createSummaryCache();
+  let calls = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const factory = async () => { calls++; await gate; return "one"; };
+  const first = cache.getOrCreate("same", factory);
+  const second = cache.getOrCreate("same", factory);
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(a.value, "one");
+  assert.equal(b.value, "one");
+  assert.equal(b.cache, "COALESCED");
+});
+
+test("expires entries and evicts least-recently-used entries", async () => {
+  let now = 0;
+  const cache = createSummaryCache({ ttlMs: 10, maxEntries: 2, now: () => now });
+  await cache.getOrCreate("a", async () => 1);
+  await cache.getOrCreate("b", async () => 2);
+  await cache.getOrCreate("a", async () => 9);
+  await cache.getOrCreate("c", async () => 3);
+  assert.equal(cache.size(), 2);
+  assert.equal((await cache.getOrCreate("b", async () => 8)).cache, "MISS");
+  now = 20;
+  assert.equal((await cache.getOrCreate("a", async () => 7)).cache, "MISS");
+});
+
+test("does not cache failures", async () => {
+  const cache = createSummaryCache();
+  await assert.rejects(cache.getOrCreate("failed", async () => { throw new Error("no"); }));
+  assert.equal((await cache.getOrCreate("failed", async () => "ok")).cache, "MISS");
+});
